@@ -1,0 +1,43 @@
+[package]
+
+name = "rust-media"
+version = "0.1.0"
+authors = ["The Servo Project Developers"]
+
+build = "make -f makefile.cargo"
+
+[lib]
+
+name = "rust-media"
+path = "lib.rs"
+
+[dependencies.libvpx-sys]
+
+git = "https://github.com/pcwalton/libvpx"
+branch = "servo"
+
+[dependencies.libwebm-sys]
+
+git = "https://github.com/pcwalton/libwebm"
+branch = "servo"
+
+[dependencies.mp4v2-sys]
+
+git = "https://github.com/pcwalton/mp4v2"
+branch = "servo"
+
+[dependencies.openh264-sys]
+
+git = "https://github.com/pcwalton/openh264"
+branch = "servo"
+
+[dependencies.vorbis-sys]
+
+git = "https://github.com/pcwalton/vorbis"
+branch = "servo"
+
+[dependencies.core_foundation]
+
+git = "https://github.com/servo/rust-core-foundation"
+rev = "ce3d852765827b64a0d5fb2aadd77da39665b0b0"
+
