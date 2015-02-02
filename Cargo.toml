@@ -1,0 +1,53 @@
+[package]
+
+name = "rust-media"
+version = "0.1.0"
+authors = ["The Servo Project Developers"]
+
+build = "build.rs"
+
+[lib]
+
+name = "rust-media"
+path = "lib.rs"
+
+[dependencies.libvpx-sys]
+
+git = "https://github.com/pcwalton/libvpx"
+branch = "servo"
+
+[dependencies.libwebm-sys]
+
+git = "https://github.com/pcwalton/libwebm"
+branch = "servo"
+
+[dependencies.mp4v2-sys]
+
+git = "https://github.com/pcwalton/mp4v2"
+branch = "servo"
+
+[dependencies.ogg-sys]
+
+git = "https://github.com/pcwalton/ogg"
+branch = "servo"
+
+[dependencies.vorbis-sys]
+
+git = "https://github.com/pcwalton/vorbis"
+branch = "servo"
+
+[dependencies.giflib-sys]
+
+git = "https://github.com/pcwalton/giflib"
+
+[target.x86_64-apple-darwin.dependencies.core_foundation]
+
+git = "https://github.com/servo/rust-core-foundation"
+rev = "da9a52655fce4727dcf261d6ed9a49eeddc7b131"
+
+[features]
+
+default = []
+
+ffmpeg = []
+

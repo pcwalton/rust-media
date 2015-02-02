@@ -1,0 +1,20 @@
+CXX ?= g++
+AR ?= ar
+
+SRC = mkvparser.cpp
+OBJS = $(SRC:%.cpp=$(OUT_DIR)/%.o)
+
+LIBWEBM_OUTDIR ?= $(shell find $(OUT_DIR)/../.. -name 'libwebm-*' '(' -type d -or -type l ')')/out
+
+CXXFLAGS += -std=gnu++11 -Wall -I$(LIBWEBM_OUTDIR) -O2 -fPIC
+
+.PHONY:	all
+
+all: $(OUT_DIR)/librustmedia.a
+
+$(OUT_DIR)/%.o:	%.cpp
+	mkdir -p `dirname $@` && $(CXX) $< -o $@ -c $(CXXFLAGS) -lstdc++
+
+$(OUT_DIR)/librustmedia.a:	$(OBJS)
+	$(AR) rcs $@ $(OBJS)
+
