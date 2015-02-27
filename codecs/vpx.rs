@@ -17,6 +17,7 @@ use libc::{c_int, c_long, c_uint};
 use std::ptr;
 use std::slice;
 use std::u32;
+use std::marker::PhantomData;
 
 pub struct VpxCodecIface {
     iface: *mut ffi::vpx_codec_iface_t,
@@ -93,6 +94,7 @@ impl VpxCodec {
         } else {
             Some(VpxCodecIter {
                 iter: iter_ptr,
+                phantom: PhantomData,
             })
         };
         if !image.is_null() {
@@ -107,6 +109,7 @@ impl VpxCodec {
 
 pub struct VpxCodecIter<'a> {
     iter: ffi::vpx_codec_iter_t,
+    phantom: PhantomData<&'a u8>,
 }
 
 pub struct VpxImage {
@@ -151,7 +154,7 @@ impl VpxImage {
         assert!(index < 4);
         unsafe {
             let len = (self.stride(index) as c_uint) * (*self.image).h;
-            slice::from_raw_mut_buf(&(*self.image).planes[index as usize], len as usize)
+            slice::from_raw_parts_mut((*self.image).planes[index as usize], len as usize)
         }
     }
 

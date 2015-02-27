@@ -16,14 +16,13 @@ use timing::Timestamp;
 use videodecoder;
 
 use libc::{self, c_char, c_double, c_int, c_long, c_void};
-use std::ffi::CString;
+use std::ffi::{CString, CStr};
 use std::mem;
 use std::old_io::SeekStyle;
 use std::ptr;
 use std::slice::bytes;
 use std::slice;
 use std::str::{self, FromStr};
-use std;
 
 pub struct Mp4FileHandle {
     handle: ffi::MP4FileHandle,
@@ -45,7 +44,7 @@ impl Mp4FileHandle {
         let handle = unsafe {
             let address = mem::transmute::<Box<Box<_>>,*mut c_void>(Box::new(reader));
             let fake_path = format!("{}", address as usize);
-            let fake_path = CString::from_slice(fake_path.as_bytes());
+            let fake_path = CString::new(fake_path.as_bytes()).unwrap();
             ffi::MP4ReadProvider(fake_path.as_ptr(), &FILE_PROVIDER)
         };
         if !handle.is_null() {
@@ -71,7 +70,7 @@ impl Mp4FileHandle {
 
     pub fn have_track_atom(&self, track_id: ffi::MP4TrackId, atom_name: &[u8]) -> bool {
         unsafe {
-            let atom_name = CString::from_slice(atom_name);
+            let atom_name = CString::new(atom_name).unwrap();
             ffi::MP4HaveTrackAtom(self.handle, track_id, atom_name.as_ptr())
         }
     }
@@ -148,7 +147,7 @@ impl Mp4FileHandle {
 
     pub fn integer_property(&self, track_id: ffi::MP4TrackId, property_name: &[u8])
                             -> Result<u64,()> {
-        let property_name = CString::from_slice(property_name);
+        let property_name = CString::new(property_name).unwrap();
         let mut value = 0;
         unsafe {
             let ok = ffi::MP4GetTrackIntegerProperty(self.handle,
@@ -165,7 +164,7 @@ impl Mp4FileHandle {
 
     pub fn bytes_property<'a>(&'a self, track_id: ffi::MP4TrackId, property_name: &[u8])
                               -> Result<&'a [u8],()> {
-        let property_name = CString::from_slice(property_name);
+        let property_name = CString::new(property_name).unwrap();
         let (mut value, mut value_size) = (ptr::null_mut(), 0);
         unsafe {
             let ok = ffi::MP4GetTrackBytesProperty(self.handle,
@@ -175,7 +174,7 @@ impl Mp4FileHandle {
                                                    &mut value_size);
             if ok {
                 Ok(mem::transmute::<&mut [u8],
-                                    &'a [u8]>(slice::from_raw_mut_buf(&value,
+                                    &'a [u8]>(slice::from_raw_parts_mut(value,
                                                                       value_size as usize)))
             } else {
                 Err(())
@@ -204,8 +203,7 @@ impl Mp4FileHandle {
                 return Err(())
             }
             Ok(Sample {
-                bytes: slice::from_raw_mut_buf(mem::transmute::<&_,&_>(&bytes),
-                                               num_bytes as usize),
+                bytes: slice::from_raw_parts_mut(bytes, num_bytes as usize),
                 start_time: start_time,
                 duration: duration,
                 rendering_offset: rendering_offset,
@@ -222,7 +220,7 @@ impl Mp4FileHandle {
                                                         &mut value,
                                                         &mut value_size);
             if ok {
-                slice::from_raw_mut_buf(&value, value_size as usize).iter().map(|x| *x).collect()
+                slice::from_raw_parts_mut(value, value_size as usize).iter().map(|x| *x).collect()
             } else {
                 return Err(())
             }
@@ -281,7 +279,7 @@ static FILE_PROVIDER: ffi::MP4FileProvider = ffi::MP4FileProvider {
 extern "C" fn file_provider_open(name: *const c_char, _: ffi::MP4FileMode) -> *mut c_void {
     unsafe {
         mem::transmute::<usize,*mut c_void>(
-            FromStr::from_str(str::from_utf8(std::ffi::c_str_to_bytes(&name)).unwrap()).unwrap())
+            FromStr::from_str(str::from_utf8(CStr::from_ptr(name).to_bytes()).unwrap()).unwrap())
     }
 }
 
@@ -309,7 +307,7 @@ extern "C" fn file_provider_read(mut handle: *mut c_void,
     unsafe {
         let reader: &mut Box<Box<StreamReader>> = mem::transmute(&mut handle);
         match reader.read_at_least(size as usize,
-                                   slice::from_raw_mut_buf(&(buffer as *mut u8), size as usize)) {
+                                   slice::from_raw_parts_mut((buffer as *mut u8), size as usize)) {
             Ok(number_read) => {
                 *nin = number_read as i64;
                 0
@@ -371,7 +369,7 @@ impl H264Headers {
 		unsafe {
 			let (mut header_ptr, mut header_size_ptr) = (self.seq_headers, self.seq_header_size);
 			while !(*header_ptr).is_null() {
-				result.push(slice::from_raw_mut_buf(&mut *header_ptr, *header_size_ptr as usize));
+				result.push(slice::from_raw_parts_mut(*header_ptr, *header_size_ptr as usize));
 				header_ptr = header_ptr.offset(1);
 				header_size_ptr = header_size_ptr.offset(1);
 			}
@@ -384,7 +382,7 @@ impl H264Headers {
 		unsafe {
 			let (mut header_ptr, mut header_size_ptr) = (self.pict_header, self.pict_header_size);
 			while !(*header_ptr).is_null() {
-				result.push(slice::from_raw_mut_buf(&mut *header_ptr, *header_size_ptr as usize));
+				result.push(slice::from_raw_parts_mut(*header_ptr, *header_size_ptr as usize));
 				header_ptr = header_ptr.offset(1);
 				header_size_ptr = header_size_ptr.offset(1);
 			}

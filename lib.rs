@@ -7,7 +7,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#![feature(alloc, collections, core, io, libc, std_misc, unsafe_destructor)]
+#![feature(alloc, collections, core, old_io, libc, std_misc, unsafe_destructor)]
 
 extern crate alloc;
 extern crate libc;
