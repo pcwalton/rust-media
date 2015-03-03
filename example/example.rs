@@ -17,9 +17,8 @@ extern crate sdl2;
 #[macro_use]
 extern crate log;
 
-use libc::c_long;
 use media::audioformat::{ConvertAudioFormat, Float32Interleaved, Float32Planar};
-use media::container::{AudioTrack, ContainerReader, Frame, Track, VideoTrack};
+use media::container::{AudioTrack, Frame, VideoTrack};
 use media::pixelformat::{ConvertPixelFormat, PixelFormat, Rgb24};
 use media::playback::Player;
 use media::videodecoder::{DecodedVideoFrame, VideoDecoder};
@@ -112,10 +111,7 @@ impl<'a> ExampleVideoRenderer<'a> {
     }
 
     fn present(&mut self, image: Box<DecodedVideoFrame + 'static>, player: &mut Player) {
-        let video_track_number = player.video_track_number().unwrap();
-        let reader = &mut *player.reader;
-        let video_track = reader.track_by_number(video_track_number as c_long);
-        let video_track = video_track.as_video_track().unwrap();
+        let video_track = player.video_track().unwrap();
 
         let rect = if let &RendererParent::Window(ref window) = self.renderer.get_parent() {
             let (width, height) = window.get_size();
@@ -302,7 +298,6 @@ fn main() {
         return
     }
 
-    println!("foo");
     let mut sdl_context = sdl2::init(INIT_VIDEO | INIT_AUDIO).ok().expect("Could not start SDL");
     let file = Box::new(File::open(&Path::new(args[1].as_slice()))
                         .ok().expect("Could not open media file"));
@@ -310,9 +305,7 @@ fn main() {
     let mut player = Player::new(file, args[2].as_slice());
     let mut media_player = ExampleMediaPlayer::new();
 
-    let renderer = player.video_track_number().map(|video_track_number| {
-        let video_track = player.reader.track_by_number(video_track_number as c_long);
-        let video_track = video_track.as_video_track().ok().expect("Could not get video track");
+    let renderer = player.video_track().map(|video_track| {
         let window = Window::new("rust-media example",
                                  WindowPos::PosCentered,
                                  WindowPos::PosCentered,
@@ -322,18 +315,14 @@ fn main() {
         Renderer::from_window(window, RenderDriverIndex::Auto, ACCELERATED | PRESENTVSYNC)
             .ok().expect("could not render window")
     });
-    let mut video_renderer = player.video_track_number().map(|video_track_number| {
-        let video_track = player.reader.track_by_number(video_track_number as c_long);
-        let video_track = video_track.as_video_track().ok().expect("Could not get video track");
+    let mut video_renderer = player.video_track().map(|video_track| {
         let video_format = SdlVideoFormat::from_video_track(&*video_track);
         ExampleVideoRenderer::new(renderer.as_ref().expect("Could not get renderer"),
                                   video_format,
                                   video_track.height() as i32)
     });
 
-    let mut audio_renderer = player.audio_track_number().map(|audio_track_number| {
-        let audio_track = player.reader.track_by_number(audio_track_number as c_long);
-        let audio_track = audio_track.as_audio_track().ok().expect("Could not get audio track");
+    let mut audio_renderer = player.audio_track().map(|audio_track| {
         let renderer = ExampleAudioRenderer::new(audio_track.sampling_rate(),
                                                  audio_track.channels());
         renderer.resume();
