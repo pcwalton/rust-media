@@ -17,16 +17,17 @@ use timing::Timestamp;
 use videodecoder;
 
 use libc::{c_double, c_int, c_long};
-use std::str;
 
 pub trait ContainerReader {
     fn track_count(&self) -> u16;
-    fn track_by_index<'a>(&'a self, index: u16) -> Box<Track + 'a>;
-    fn track_by_number<'a>(&'a self, number: c_long) -> Box<Track + 'a>;
+    fn track_by_index<'a>(&'a self, index: u16) -> Box<Track<'a> + 'a>;
+    fn track_by_number<'a>(&'a self, number: c_long) -> Box<Track<'a> + 'a>;
 }
 
-pub trait Track {
-    fn track_type(&self) -> TrackType;
+pub trait Track<'x> {
+    fn track_type(self: Box<Self>) -> TrackType<'x>;
+    fn is_video(&self) -> bool;
+    fn is_audio(&self) -> bool;
 
     /// Returns the number of clusters in this track, if possible. Returns `None` if this container
     /// has no table of contents (so the number of clusters is unknown).
@@ -35,11 +36,9 @@ pub trait Track {
     fn number(&self) -> c_long;
     fn codec(&self) -> Option<Vec<u8>>;
     fn cluster<'a>(&'a self, cluster_index: i32) -> Result<Box<Cluster + 'a>,()>;
-    fn as_video_track<'a>(&'a self) -> Result<Box<VideoTrack + 'a>,()>;
-    fn as_audio_track<'a>(&'a self) -> Result<Box<AudioTrack + 'a>,()>;
 }
 
-pub trait VideoTrack : Track {
+pub trait VideoTrack<'a> : Track<'a> {
     /// Returns the width of this track in pixels.
     fn width(&self) -> u16;
 
@@ -58,7 +57,7 @@ pub trait VideoTrack : Track {
 	fn headers(&self) -> Box<videodecoder::VideoHeaders>;
 }
 
-pub trait AudioTrack : Track {
+pub trait AudioTrack<'a> : Track<'a> {
     fn sampling_rate(&self) -> c_double;
     fn channels(&self) -> u16;
     fn headers(&self) -> Box<audiodecoder::AudioHeaders>;
@@ -80,45 +79,42 @@ pub trait Frame {
     fn rendering_offset(&self) -> i64;
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub enum TrackType {
-    Video,
-    Audio,
-    Other,
+pub enum TrackType<'a> {
+    Video(Box<VideoTrack<'a> + 'a>),
+    Audio(Box<AudioTrack<'a> + 'a>),
+    Other(Box<Track<'a> + 'a>),
 }
+
 
 /// Generic convenience methods for tracks.
 pub trait TrackExt {
     fn debug(&self) -> String;
 }
-
-impl<'a,'b> TrackExt for &'a (Track + 'b) {
+/*
+impl<'a,'b> TrackExt for &'a (Track<'b> + 'b) {
     fn debug(&self) -> String {
+        use std::fmt::Write; // Shim for write! being duck-typed in io transition
         let mut result = format!("Track {}\n", self.number());
-        result.push_str(format!("  Type: {:?}\n", self.track_type()).as_slice());
         if let Some(codec) = self.codec() {
-            if let Ok(codec) = str::from_utf8(codec.as_slice()) {
-                result.push_str(format!("  Codec: {}\n", codec).as_slice());
+            if let Ok(codec) = str::from_utf8(&codec) {
+                write!(&mut result, "  Codec: {}\n", codec);
             }
         }
 
         match self.track_type() {
-            TrackType::Video => {
-                let video_track = self.as_video_track().unwrap();
-                result.push_str(format!("  Width: {}\n", video_track.width()).as_slice());
-                result.push_str(format!("  Height: {}\n", video_track.height()).as_slice());
-                result.push_str(format!("  Frame Rate: {}\n",
-                                        video_track.frame_rate()).as_slice());
+            TrackType::Video(video_track) => {
+                write!(&mut result, "  Width: {}\n", video_track.width());
+                write!(&mut result, "  Height: {}\n", video_track.height());
+                write!(&mut result, "  Frame Rate: {}\n", video_track.frame_rate());
                 if let Some(cluster_count) = video_track.cluster_count() {
-                    result.push_str(format!("  Cluster Count: {}\n", cluster_count).as_slice());
+                    write!(&mut result, "  Cluster Count: {}\n", cluster_count);
                 }
             }
-            TrackType::Audio => {
-                let audio_track = self.as_audio_track().unwrap();
-                result.push_str(format!("  Channels: {}\n", audio_track.channels()).as_slice());
-                result.push_str(format!("  Rate: {}\n", audio_track.sampling_rate()).as_slice());
+            TrackType::Audio(audio_track) => {
+                write!(&mut result, "  Channels: {}\n", audio_track.channels());
+                write!(&mut result, "  Rate: {}\n", audio_track.sampling_rate());
                 if let Some(cluster_count) = audio_track.cluster_count() {
-                    result.push_str(format!("  Cluster Count: {}\n", cluster_count).as_slice());
+                    write!(&mut result, "  Cluster Count: {}\n", cluster_count);
                 }
             }
             _ => {}
@@ -126,7 +122,7 @@ impl<'a,'b> TrackExt for &'a (Track + 'b) {
         result
     }
 }
-
+*/
 #[allow(missing_copy_implementations)]
 pub struct RegisteredContainerReader {
     pub mime_types: &'static [&'static str],
@@ -136,7 +132,7 @@ pub struct RegisteredContainerReader {
 
 impl RegisteredContainerReader {
     pub fn get(mime_type: &str) -> Result<&'static RegisteredContainerReader,()> {
-        for container_reader in CONTAINER_READERS.iter() {
+        for container_reader in &CONTAINER_READERS {
             if container_reader.mime_types.iter().any(|mime| mime == &mime_type) {
                 return Ok(container_reader)
             }

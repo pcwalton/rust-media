@@ -481,10 +481,15 @@ struct TrackImpl<'a> {
     file: &'a RefCell<FileType>,
 }
 
-impl<'a> container::Track for TrackImpl<'a> {
-    fn track_type(&self) -> container::TrackType {
-        container::TrackType::Video
+impl<'a> container::Track<'a> for TrackImpl<'a> {
+    fn track_type(self: Box<Self>) -> container::TrackType<'a> {
+        container::TrackType::Video(Box::new(VideoTrackImpl {
+            file: self.file,
+        }) as Box<container::VideoTrack<'a> + 'a>)
     }
+
+    fn is_video(&self) -> bool { true }
+    fn is_audio(&self) -> bool { false }
 
     fn cluster_count(&self) -> Option<c_int> {
         None
@@ -500,16 +505,6 @@ impl<'a> container::Track for TrackImpl<'a> {
 
     fn cluster<'b>(&'b self, cluster_index: i32) -> Result<Box<container::Cluster + 'b>,()> {
         get_cluster(self.file, cluster_index)
-    }
-
-    fn as_video_track<'b>(&'b self) -> Result<Box<container::VideoTrack + 'b>,()> {
-        Ok(Box::new(VideoTrackImpl {
-            file: self.file,
-        }) as Box<container::VideoTrack + 'b>)
-    }
-
-    fn as_audio_track<'b>(&'b self) -> Result<Box<container::AudioTrack + 'b>,()> {
-        Err(())
     }
 }
 
@@ -517,10 +512,15 @@ struct VideoTrackImpl<'a> {
     file: &'a RefCell<FileType>,
 }
 
-impl<'a> container::Track for VideoTrackImpl<'a> {
-    fn track_type(&self) -> container::TrackType {
-        container::TrackType::Video
+impl<'a> container::Track<'a> for VideoTrackImpl<'a> {
+    fn track_type(self: Box<Self>) -> container::TrackType<'a> {
+        container::TrackType::Video(Box::new(VideoTrackImpl {
+            file: self.file,
+        }) as Box<container::VideoTrack<'a> + 'a>)
     }
+
+    fn is_video(&self) -> bool { true }
+    fn is_audio(&self) -> bool { false }
 
     fn cluster_count(&self) -> Option<c_int> {
         None
@@ -537,19 +537,9 @@ impl<'a> container::Track for VideoTrackImpl<'a> {
     fn cluster<'b>(&'b self, cluster_index: i32) -> Result<Box<container::Cluster + 'b>,()> {
         get_cluster(self.file, cluster_index)
     }
-
-    fn as_video_track<'b>(&'b self) -> Result<Box<container::VideoTrack + 'b>,()> {
-        Ok(Box::new(VideoTrackImpl {
-            file: self.file,
-        }) as Box<container::VideoTrack + 'b>)
-    }
-
-    fn as_audio_track<'b>(&'b self) -> Result<Box<container::AudioTrack + 'b>,()> {
-        Err(())
-    }
 }
 
-impl<'a> container::VideoTrack for VideoTrackImpl<'a> {
+impl<'a> container::VideoTrack<'a> for VideoTrackImpl<'a> {
     fn width(&self) -> u16 {
         self.file.borrow().width() as u16
     }
@@ -780,7 +770,7 @@ impl videodecoder::DecodedVideoFrame for DecodedVideoFrameImpl {
 
     fn pixel_format<'a>(&'a self) -> PixelFormat<'a> {
         PixelFormat::Indexed(Palette {
-            palette: self.palette.as_slice(),
+            palette: &self.palette,
         })
     }
 
@@ -790,7 +780,7 @@ impl videodecoder::DecodedVideoFrame for DecodedVideoFrameImpl {
 
     fn lock<'a>(&'a self) -> Box<videodecoder::DecodedVideoFrameLockGuard + 'a> {
         Box::new(DecodedVideoFrameLockGuardImpl {
-            pixels: self.pixels.as_slice(),
+            pixels: &self.pixels,
         }) as Box<videodecoder::DecodedVideoFrameLockGuard + 'a>
     }
 }
