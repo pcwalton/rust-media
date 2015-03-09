@@ -16,12 +16,13 @@ use timing::Timestamp;
 use videodecoder;
 
 use libc::{c_char, c_double, c_int, c_long, c_longlong, c_uchar, c_ulong, c_void, size_t};
-use std::ffi;
+use std::ffi::CStr;
 use std::mem;
 use std::num::FromPrimitive;
 use std::old_io::SeekStyle;
 use std::ptr;
 use std::slice;
+use std::marker::PhantomData;
 
 pub struct MkvReader {
     reader: WebmIMkvReaderRef,
@@ -61,7 +62,7 @@ extern "C" fn read_callback(pos: c_longlong,
         if reader.seek(pos, SeekStyle::SeekSet).is_err() {
             return -1
         }
-        match reader.read_at_least(len as usize, slice::from_raw_mut_buf(&buf, len as usize)) {
+        match reader.read_at_least(len as usize, slice::from_raw_parts_mut(buf, len as usize)) {
             Ok(number_read) if number_read == len as usize => 0,
             _ => -1,
         }
@@ -174,6 +175,7 @@ impl Segment {
         }
         Some(Tracks {
             tracks: tracks,
+            phantom: PhantomData,
         })
     }
 
@@ -188,6 +190,7 @@ impl Segment {
             segment_info: unsafe {
                 WebmSegmentGetInfo(self.segment)
             },
+            phantom: PhantomData,
         }
     }
 
@@ -200,6 +203,7 @@ impl Segment {
         } else {
             Some(Cluster {
                 cluster: result,
+                phantom: PhantomData,
             })
         }
     }
@@ -213,6 +217,7 @@ impl Segment {
         } else {
             Some(Cluster {
                 cluster: result,
+                phantom: PhantomData,
             })
         }
     }
@@ -220,6 +225,7 @@ impl Segment {
 
 pub struct SegmentInfo<'a> {
     segment_info: WebmSegmentInfoRef,
+    phantom: PhantomData<&'a u8>,
 }
 
 impl<'a> SegmentInfo<'a> {
@@ -232,6 +238,7 @@ impl<'a> SegmentInfo<'a> {
 
 pub struct Tracks<'a> {
     tracks: WebmTracksRef,
+    phantom: PhantomData<&'a u8>,
 }
 
 impl<'a> Tracks<'a> {
@@ -245,7 +252,8 @@ impl<'a> Tracks<'a> {
         Track {
             track: unsafe {
                 WebmTracksGetTrackByIndex(self.tracks, index)
-            }
+            },
+            phantom: PhantomData,
         }
     }
 
@@ -253,7 +261,8 @@ impl<'a> Tracks<'a> {
         Track {
             track: unsafe {
                 WebmTracksGetTrackByNumber(self.tracks, number)
-            }
+            },
+            phantom: PhantomData,
         }
     }
 }
@@ -261,6 +270,7 @@ impl<'a> Tracks<'a> {
 #[derive(Clone)]
 pub struct Track<'a> {
     track: WebmTrackRef,
+    phantom: PhantomData<&'a u8>,
 }
 
 impl<'a> Track<'a> {
@@ -279,7 +289,7 @@ impl<'a> Track<'a> {
     pub fn codec_id<'b>(&'b self) -> &'b [u8] {
         unsafe {
             let ptr = WebmTrackGetCodecId(self.track);
-            let bytes = ffi::c_str_to_bytes(&ptr);
+            let bytes = CStr::from_ptr(ptr).to_bytes();
             mem::transmute::<&[u8],&'b [u8]>(bytes)
         }
     }
@@ -288,7 +298,7 @@ impl<'a> Track<'a> {
         let mut size = 0;
         unsafe {
             let ptr = WebmTrackGetCodecPrivate(self.track, &mut size);
-            mem::transmute::<&[u8],&'b [u8]>(slice::from_raw_buf(&ptr, size as usize))
+            mem::transmute::<&[u8],&'b [u8]>(slice::from_raw_parts(ptr, size as usize))
         }
     }
 
@@ -300,6 +310,7 @@ impl<'a> Track<'a> {
             track: unsafe {
                 mem::transmute::<_,WebmVideoTrackRef>(self.track)
             },
+            phantom: PhantomData,
         }
     }
 
@@ -311,6 +322,7 @@ impl<'a> Track<'a> {
             track: unsafe {
                 mem::transmute::<_,WebmAudioTrackRef>(self.track)
             },
+            phantom: PhantomData,
         }
     }
 }
@@ -318,6 +330,7 @@ impl<'a> Track<'a> {
 #[derive(Clone)]
 pub struct VideoTrack<'a> {
     track: WebmVideoTrackRef,
+    phantom: PhantomData<&'a u8>,
 }
 
 impl<'a> VideoTrack<'a> {
@@ -326,6 +339,7 @@ impl<'a> VideoTrack<'a> {
             track: unsafe {
                 mem::transmute::<_,WebmTrackRef>(self.track)
             },
+            phantom: PhantomData,
         }
     }
 
@@ -351,6 +365,7 @@ impl<'a> VideoTrack<'a> {
 #[derive(Clone)]
 pub struct AudioTrack<'a> {
     track: WebmAudioTrackRef,
+    phantom: PhantomData<&'a u8>,
 }
 
 impl<'a> AudioTrack<'a> {
@@ -359,6 +374,7 @@ impl<'a> AudioTrack<'a> {
             track: unsafe {
                 mem::transmute::<_,WebmTrackRef>(self.track)
             },
+            phantom: PhantomData,
         }
     }
 
@@ -384,6 +400,7 @@ impl<'a> AudioTrack<'a> {
 #[derive(Clone)]
 pub struct Cluster<'a> {
     cluster: WebmClusterRef,
+    phantom: PhantomData<&'a u8>,
 }
 
 impl<'a> Cluster<'a> {
@@ -408,6 +425,7 @@ impl<'a> Cluster<'a> {
         if err >= 0 {
             Ok(BlockEntry {
                 entry: entry,
+                phantom: PhantomData,
             })
         } else {
             Err(err)
@@ -422,6 +440,7 @@ impl<'a> Cluster<'a> {
         if err >= 0 && entry != ptr::null_mut() {
             Ok(BlockEntry {
                 entry: entry,
+                phantom: PhantomData,
             })
         } else {
             Err(err)
@@ -447,6 +466,7 @@ impl<'a> Cluster<'a> {
         if err >= 0 {
             Ok(BlockEntry {
                 entry: entry,
+                phantom: PhantomData,
             })
         } else {
             Err(err)
@@ -478,13 +498,15 @@ pub struct ClusterInfo {
 #[derive(Clone)]
 pub struct BlockEntry<'a> {
     entry: WebmBlockEntryRef,
+    phantom: PhantomData<&'a u8>,
 }
 
 impl<'a> BlockEntry<'a> {
-    pub fn block(&self) -> Block {
+    pub fn block(&self) -> Block<'a> {
         unsafe {
             Block {
                 block: WebmBlockEntryGetBlock(self.entry),
+                phantom: PhantomData,
             }
         }
     }
@@ -499,6 +521,7 @@ impl<'a> BlockEntry<'a> {
 #[derive(Clone)]
 pub struct Block<'a> {
     block: WebmBlockRef,
+    phantom: PhantomData<&'a u8>,
 }
 
 impl<'a> Block<'a> {
@@ -511,7 +534,8 @@ impl<'a> Block<'a> {
     pub fn frame(&self, frame_index: c_int) -> BlockFrame<'a> {
         unsafe {
             BlockFrame {
-                frame: WebmBlockGetFrame(self.block, frame_index)
+                frame: WebmBlockGetFrame(self.block, frame_index),
+                phantom: PhantomData,
             }
         }
     }
@@ -549,6 +573,7 @@ impl<'a> Block<'a> {
 
 pub struct BlockFrame<'a> {
     frame: WebmBlockFrameRef,
+    phantom: PhantomData<&'a u8>,
 }
 
 impl<'a> BlockFrame<'a> {

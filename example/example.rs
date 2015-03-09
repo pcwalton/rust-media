@@ -7,7 +7,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#![feature(collections, core, env, io, libc, os, path, rustc_private, std_misc)]
+#![feature(collections, core, env, old_io, libc, old_path, rustc_private, std_misc)]
 
 extern crate clock_ticks;
 extern crate libc;
@@ -24,7 +24,7 @@ use media::pixelformat::{ConvertPixelFormat, PixelFormat, Rgb24};
 use media::playback::Player;
 use media::videodecoder::{DecodedVideoFrame, VideoDecoder};
 use sdl2::audio::{AudioCallback, AudioDevice, AudioSpecDesired};
-use sdl2::event::{self, Event, WindowEventId};
+use sdl2::event::{Event, WindowEventId};
 use sdl2::keycode::KeyCode;
 use sdl2::pixels::PixelFormatEnum;
 use sdl2::rect::Rect;
@@ -62,10 +62,11 @@ impl ExampleMediaPlayer {
 
     /// Polls events so we can quit if the user wanted to. Returns true to continue or false to
     /// quit.
-    fn poll_events(&mut self, player: &mut Player) -> bool {
-        loop {
-            match event::poll_event() {
-                Event::None => break,
+    fn poll_events(&mut self, sdl_context: &mut sdl2::Sdl, player: &mut Player) -> bool {
+        let mut event_pump = sdl_context.event_pump();
+
+        for event in event_pump.poll_iter() {
+            match event {
                 Event::Quit {
                     ..
                 } | Event::KeyDown {
@@ -105,7 +106,8 @@ impl<'a> ExampleVideoRenderer<'a> {
             texture: renderer.create_texture(video_format.sdl_pixel_format,
                                              TextureAccess::Streaming,
                                              (video_format.sdl_width as i32,
-                                              video_height)).unwrap(),
+                                              video_height))
+                        .ok().expect("Could not create rendered texture"),
         }
     }
 
@@ -145,7 +147,7 @@ impl<'a> ExampleVideoRenderer<'a> {
             };
             let pixels = unsafe {
                 mem::transmute::<&mut [u8],
-                                 &mut [u8]>(slice::from_raw_mut_buf(&mut pixels.as_mut_ptr(),
+                                 &mut [u8]>(slice::from_raw_parts_mut(pixels.as_mut_ptr(),
                                                                     real_length))
             };
             upload_image(video_track, &*image, pixels, stride as i32)
@@ -190,7 +192,9 @@ pub struct ExampleAudioRenderer {
     samples: Vec<f32>,
 }
 
-impl AudioCallback<f32> for ExampleAudioRenderer {
+impl AudioCallback for ExampleAudioRenderer {
+    type Channel = f32;
+
     fn callback(&mut self, out: &mut [f32]) {
         if self.samples.len() < out.len() {
             // Zero out the buffer to avoid damaging the listener's eardrums.
@@ -292,41 +296,44 @@ fn upload_image(video_track: &VideoTrack,
 }
 
 fn main() {
-    let args: Vec<String> = env::args().map(|arg| arg.into_string().unwrap()).collect();
+    let args: Vec<String> = env::args().collect();
     if args.len() < 3 {
         println!("usage: example path-to-video-or-audio-file mime-type");
         return
     }
 
-    sdl2::init(INIT_VIDEO | INIT_AUDIO);
-    let file = Box::new(File::open(&Path::new(args[1].as_slice())).unwrap());
+    println!("foo");
+    let mut sdl_context = sdl2::init(INIT_VIDEO | INIT_AUDIO).ok().expect("Could not start SDL");
+    let file = Box::new(File::open(&Path::new(args[1].as_slice()))
+                        .ok().expect("Could not open media file"));
 
     let mut player = Player::new(file, args[2].as_slice());
     let mut media_player = ExampleMediaPlayer::new();
 
     let renderer = player.video_track_number().map(|video_track_number| {
         let video_track = player.reader.track_by_number(video_track_number as c_long);
-        let video_track = video_track.as_video_track().unwrap();
+        let video_track = video_track.as_video_track().ok().expect("Could not get video track");
         let window = Window::new("rust-media example",
                                  WindowPos::PosCentered,
                                  WindowPos::PosCentered,
                                  video_track.width() as i32,
                                  video_track.height() as i32,
-                                 OPENGL | RESIZABLE).unwrap();
-        Renderer::from_window(window, RenderDriverIndex::Auto, ACCELERATED | PRESENTVSYNC).unwrap()
+                                 OPENGL | RESIZABLE).ok().expect("Could not create window");
+        Renderer::from_window(window, RenderDriverIndex::Auto, ACCELERATED | PRESENTVSYNC)
+            .ok().expect("could not render window")
     });
     let mut video_renderer = player.video_track_number().map(|video_track_number| {
         let video_track = player.reader.track_by_number(video_track_number as c_long);
-        let video_track = video_track.as_video_track().unwrap();
+        let video_track = video_track.as_video_track().ok().expect("Could not get video track");
         let video_format = SdlVideoFormat::from_video_track(&*video_track);
-        ExampleVideoRenderer::new(renderer.as_ref().unwrap(),
+        ExampleVideoRenderer::new(renderer.as_ref().expect("Could not get renderer"),
                                   video_format,
                                   video_track.height() as i32)
     });
 
     let mut audio_renderer = player.audio_track_number().map(|audio_track_number| {
         let audio_track = player.reader.track_by_number(audio_track_number as c_long);
-        let audio_track = audio_track.as_audio_track().unwrap();
+        let audio_track = audio_track.as_audio_track().ok().expect("Could not get audio track");
         let renderer = ExampleAudioRenderer::new(audio_track.sampling_rate(),
                                                  audio_track.channels());
         renderer.resume();
@@ -356,7 +363,7 @@ fn main() {
             enqueue_audio_samples(audio_renderer, frame.audio_samples.unwrap().as_slice());
         }
 
-        if !media_player.poll_events(&mut player) {
+        if !media_player.poll_events(&mut sdl_context, &mut player) {
             break
         }
     }

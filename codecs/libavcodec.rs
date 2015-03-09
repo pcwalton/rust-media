@@ -23,6 +23,7 @@ use std::i32;
 use std::mem;
 use std::ptr;
 use std::slice;
+use std::marker::PhantomData;
 
 pub type AvCodecId = ffi::AVCodecID;
 
@@ -171,7 +172,7 @@ impl AvCodecContext {
     }
 
     pub fn get_double_opt(&self, name: &[u8]) -> Result<c_double,c_int> {
-        let name = CString::from_slice(name);
+        let name = CString::new(name).unwrap();
         let mut out_val = 0.0;
         let result = unsafe {
             ffi::av_opt_get_double(self.context.ptr() as *mut c_void,
@@ -187,7 +188,7 @@ impl AvCodecContext {
     }
 
     pub fn get_q_opt(&self, name: &[u8]) -> Result<ffi::AVRational,c_int> {
-        let name = CString::from_slice(name);
+        let name = CString::new(name).unwrap();
         let mut out_val = ffi::AVRational {
             num: 0,
             den: 0,
@@ -324,7 +325,7 @@ impl AvFrame {
     pub fn video_data<'a>(&'a self, plane_index: usize) -> &'a [u8] {
         let len = self.linesize(plane_index) * self.height();
         unsafe {
-            slice::from_raw_mut_buf(&(*self.frame).data[plane_index], len as usize)
+            slice::from_raw_parts_mut((*self.frame).data[plane_index], len as usize)
         }
     }
 
@@ -335,13 +336,14 @@ impl AvFrame {
                                        true).unwrap()
                                             .linesize;
         unsafe {
-            slice::from_raw_mut_buf(&(*self.frame).data[channel], len as usize)
+            slice::from_raw_parts_mut((*self.frame).data[channel], len as usize)
         }
     }
 }
 
 pub struct AvPacket<'a> {
     packet: ffi::EitherAVPacket,
+    phantom: PhantomData<&'a u8>,
 }
 
 impl<'a> AvPacket<'a> {
@@ -377,6 +379,7 @@ impl<'a> AvPacket<'a> {
 
         AvPacket {
             packet: packet,
+            phantom: PhantomData,
         }
     }
 }
@@ -402,8 +405,8 @@ impl AvDictionary {
 
     pub fn set(&mut self, key: &str, value: &str) {
         unsafe {
-            let key = CString::from_slice(key.as_bytes());
-            let value = CString::from_slice(value.as_bytes());
+            let key = CString::new(key.as_bytes()).unwrap();
+            let value = CString::new(value.as_bytes()).unwrap();
             assert!(ffi::av_dict_set(&mut self.dictionary, key.as_ptr(), value.as_ptr(), 0) >= 0);
         }
     }
@@ -478,7 +481,7 @@ impl videodecoder::VideoDecoder for VideoDecoderImpl {
 
         let mut packet = AvPacket::new(data.as_mut_slice());
         let presentation_time = *presentation_time;
-        self.context.borrow_mut().set_get_buffer_callback(Box::new(|frame: &AvFrame| {
+        self.context.borrow_mut().set_get_buffer_callback(Box::new(move |frame: &AvFrame| {
             frame.set_user_data(Box::new(presentation_time))
         }));
 
@@ -632,7 +635,7 @@ impl<'a> audiodecoder::DecodedAudioSamples for DecodedAudioSamplesImpl<'a> {
         let data = self.frame.audio_data(channel as usize, self.channels);
         unsafe {
             Some(mem::transmute::<&[f32],
-                                  &'b [f32]>(slice::from_raw_buf(&(data.as_ptr() as *const f32),
+                                  &'b [f32]>(slice::from_raw_parts((data.as_ptr() as *const f32),
                                                                  data.len() /
                                                                     mem::size_of::<f32>())))
         }

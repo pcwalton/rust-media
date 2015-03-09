@@ -15,6 +15,7 @@ use libc::{c_float, c_int};
 use std::mem;
 use std::ptr;
 use std::slice;
+use std::marker::PhantomData;
 
 pub struct VorbisInfo {
     info: Box<ffi::vorbis_info>,
@@ -126,6 +127,7 @@ impl VorbisDspState {
                 (*self.state.vi).channels
             },
             samples: result,
+            phantom: PhantomData,
         })
     }
 
@@ -201,6 +203,7 @@ pub struct Pcm<'a> {
     pcm: *mut *mut c_float,
     channels: c_int,
     samples: c_int,
+    phantom: PhantomData<&'a u8>,
 }
 
 impl<'a> Pcm<'a> {
@@ -212,7 +215,7 @@ impl<'a> Pcm<'a> {
         unsafe {
             let buffer = (*self.pcm).offset(channel as isize);
             mem::transmute::<&[c_float],
-                             &'a [c_float]>(slice::from_raw_mut_buf(&buffer,
+                             &'a [c_float]>(slice::from_raw_parts_mut(buffer,
                                                                     self.samples as usize))
         }
     }

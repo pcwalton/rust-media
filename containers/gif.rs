@@ -27,6 +27,7 @@ use std::num::FromPrimitive;
 use std::old_io::{BufReader, BufWriter, SeekStyle};
 use std::ptr;
 use std::slice;
+use std::marker::PhantomData;
 
 #[repr(C)]
 pub struct FileType {
@@ -187,7 +188,7 @@ impl FileType {
             if saved_image.RasterBits.is_null() {
                 return Err(())
             }
-            let mut raster_bits = slice::from_raw_mut_buf(&saved_image.RasterBits,
+            let mut raster_bits = slice::from_raw_parts_mut(saved_image.RasterBits,
                                                           image_size as usize);
 
             if (*saved_image).ImageDesc.Interlace {
@@ -238,6 +239,7 @@ impl FileType {
             if !(*self.file).SColorMap.is_null() {
                 Some(ColorMapObject {
                     map: (*self.file).SColorMap,
+                    phantom: PhantomData,
                 })
             } else {
                 None
@@ -247,12 +249,12 @@ impl FileType {
 
     pub fn saved_images<'a>(&'a self) -> &'a [SavedImage] {
         unsafe {
-            slice::from_raw_mut_buf(&(*self.file).SavedImages, (*self.file).ImageCount as usize)
+            slice::from_raw_parts((*self.file).SavedImages, (*self.file).ImageCount as usize)
         }
     }
 
     pub unsafe fn mut_saved_images<'a>(&'a mut self) -> &'a mut [SavedImage] {
-        slice::from_raw_mut_buf(&(*self.file).SavedImages, (*self.file).ImageCount as usize)
+        slice::from_raw_parts_mut((*self.file).SavedImages, (*self.file).ImageCount as usize)
     }
 
     pub fn extension_block_count(&self) -> c_int {
@@ -277,7 +279,7 @@ extern "C" fn read_func(file: *mut ffi::GifFileType, buffer: *mut ffi::GifByteTy
 
     unsafe {
         let reader: &mut Box<Box<StreamReader>> = mem::transmute(&mut (*file).UserData);
-        match reader.read(slice::from_raw_mut_buf(&buffer, len as usize)) {
+        match reader.read(slice::from_raw_parts_mut(buffer, len as usize)) {
             Ok(number_read) => number_read as c_int,
             _ => -1
         }
@@ -295,7 +297,7 @@ pub struct SavedImage {
 impl SavedImage {
     pub fn raster_bits<'a>(&'a self) -> &'a [ffi::GifByteType] {
         unsafe {
-            slice::from_raw_mut_buf(&self.RasterBits,
+            slice::from_raw_parts_mut(self.RasterBits,
                                     self.ImageDesc.Width as usize * self.ImageDesc.Height as usize)
         }
     }
@@ -340,6 +342,7 @@ impl<'a> ImageDesc<'a> {
         if !self.desc.ColorMap.is_null() {
             Some(ColorMapObject {
                 map: self.desc.ColorMap,
+                phantom: PhantomData,
             })
         } else {
             None
@@ -349,6 +352,7 @@ impl<'a> ImageDesc<'a> {
 
 pub struct ColorMapObject<'a> {
     map: *mut ffi::ColorMapObject,
+    phantom: PhantomData<&'a u8>,
 }
 
 impl<'a> ColorMapObject<'a> {
@@ -360,7 +364,7 @@ impl<'a> ColorMapObject<'a> {
 
     pub fn colors(&'a self) -> &'a [ffi::GifColorType] {
         unsafe {
-            slice::from_raw_mut_buf(&(*self.map).Colors, (*self.map).ColorCount as usize)
+            slice::from_raw_parts_mut((*self.map).Colors, (*self.map).ColorCount as usize)
         }
     }
 }
@@ -400,7 +404,7 @@ impl<'a> ExtensionBlock<'a> {
 
         unsafe fn to_byte_slice<'a>(block: *mut ffi::ExtensionBlock) -> &'a [u8] {
             assert!((*block).ByteCount >= 0);
-            slice::from_raw_mut_buf(&(*block).Bytes, (*block).ByteCount as usize)
+            slice::from_raw_parts_mut((*block).Bytes, (*block).ByteCount as usize)
         }
     }
 }

@@ -18,6 +18,7 @@ use libc::{c_int, c_long};
 use std::iter;
 use std::mem;
 use std::num::SignedInt;
+use std::marker::PhantomData;
 
 /// A simple video/audio player.
 pub struct Player<'a> {
@@ -36,6 +37,7 @@ pub struct Player<'a> {
     last_frame_presentation_time: Option<Timestamp>,
     /// The time at which the next frame is to be played.
     next_frame_presentation_time: Option<Timestamp>,
+    phantom: PhantomData<&'a u8>,
 }
 
 impl<'a> Player<'a> {
@@ -83,6 +85,7 @@ impl<'a> Player<'a> {
             frame_delay: None,
             last_frame_presentation_time: None,
             next_frame_presentation_time: None,
+            phantom: PhantomData,
         }
     }
 
@@ -231,7 +234,7 @@ impl<'a> Player<'a> {
     pub fn next_frame_presentation_time(&self) -> Option<Timestamp> {
         self.next_frame_presentation_time
     }
-    
+
     /// Retrieves the decoded frame data and advances to the next frame.
     pub fn advance(&mut self) -> Result<DecodedFrame,()> {
         // Determine the frame delay, if possible.
