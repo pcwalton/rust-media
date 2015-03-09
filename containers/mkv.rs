@@ -281,18 +281,22 @@ impl<'a> Track<'a> {
     pub fn track_type(self) -> TrackType<'a> {
         let track_type = unsafe { WebmTrackGetType(self.track) as i32 };
         match track_type {
-            VIDEO_TRACK_TYPE => TrackType::Video(VideoTrack {
-                track: unsafe {
-                    mem::transmute::<_,WebmVideoTrackRef>(self.track)
-                },
-                phantom: PhantomData,
-            }),
-            AUDIO_TRACK_TYPE => TrackType::Audio(AudioTrack {
-                track: unsafe {
-                    mem::transmute::<_,WebmAudioTrackRef>(self.track)
-                },
-                phantom: PhantomData,
-            }),
+            VIDEO_TRACK_TYPE => {
+                TrackType::Video(VideoTrack {
+                    track: unsafe {
+                        mem::transmute::<_,WebmVideoTrackRef>(self.track)
+                    },
+                    phantom: PhantomData,
+                })
+            }
+            AUDIO_TRACK_TYPE => {
+                TrackType::Audio(AudioTrack {
+                    track: unsafe {
+                        mem::transmute::<_,WebmAudioTrackRef>(self.track)
+                    },
+                    phantom: PhantomData,
+                })
+            }
             _ => TrackType::Other(self),
         }
     }
@@ -673,21 +677,27 @@ impl<'a> container::Track<'a> for TrackImpl<'a> {
         let reader = self.reader;
         let track = self.track;
         match track.track_type() {
-            TrackType::Video(track) => container::TrackType::Video(Box::new(VideoTrackImpl {
-                track: track,
-                segment: segment,
-                reader: reader,
-            }) as Box<container::VideoTrack<'a> + 'a>),
-            TrackType::Audio(track) => container::TrackType::Audio(Box::new(AudioTrackImpl {
-                track: track,
-                segment: segment,
-                reader: reader,
-            }) as Box<container::AudioTrack<'a> + 'a>),
-            TrackType::Other(track) => container::TrackType::Other(Box::new(TrackImpl {
-                track: track,
-                segment: segment,
-                reader: reader,
-            }) as Box<container::Track<'a> + 'a>),
+            TrackType::Video(track) => {
+                container::TrackType::Video(Box::new(VideoTrackImpl {
+                    track: track,
+                    segment: segment,
+                    reader: reader,
+                }) as Box<container::VideoTrack<'a> + 'a>)
+            }
+            TrackType::Audio(track) => {
+                container::TrackType::Audio(Box::new(AudioTrackImpl {
+                    track: track,
+                    segment: segment,
+                    reader: reader,
+                }) as Box<container::AudioTrack<'a> + 'a>)
+            }
+            TrackType::Other(track) => {
+                container::TrackType::Other(Box::new(TrackImpl {
+                    track: track,
+                    segment: segment,
+                    reader: reader,
+                }) as Box<container::Track<'a> + 'a>)
+            }
         }
     }
     fn is_video(&self) -> bool { self.track.is_video() }

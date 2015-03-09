@@ -22,6 +22,41 @@ pub trait ContainerReader {
     fn track_count(&self) -> u16;
     fn track_by_index<'a>(&'a self, index: u16) -> Box<Track<'a> + 'a>;
     fn track_by_number<'a>(&'a self, number: c_long) -> Box<Track<'a> + 'a>;
+
+    fn debug(&self, number: c_long) -> String {
+        use std::fmt::Write; // Shim for `writeln` being duck-typed during old_io transition
+        
+        let track = self.track_by_number(index);
+
+        let mut result = format!("Track {}\n", track.number());
+        if let Some(codec) = track.codec() {
+            if let Ok(codec) = str::from_utf8(&codec) {
+                writeln!(&mut result, "  Codec: {}", codec);
+            }
+        }
+
+        match track.track_type() {
+            TrackType::Video(video_track) => {
+                writeln!(&mut result, " Type: Video");
+                writeln!(&mut result, "  Width: {}", video_track.width());
+                writeln!(&mut result, "  Height: {}", video_track.height());
+                writeln!(&mut result, "  Frame Rate: {}", video_track.frame_rate());
+                if let Some(cluster_count) = video_track.cluster_count() {
+                    writeln!(&mut result, "  Cluster Count: {}", cluster_count);
+                }
+            }
+            TrackType::Audio(audio_track) => {
+                writeln!(&mut result, " Type: Audio");
+                writeln!(&mut result, "  Channels: {}", audio_track.channels());
+                writeln!(&mut result, "  Rate: {}", audio_track.sampling_rate());
+                if let Some(cluster_count) = audio_track.cluster_count() {
+                    writeln!(&mut result, "  Cluster Count: {}", cluster_count);
+                }
+            }
+            _ => {}
+        }
+        result
+    }
 }
 
 pub trait Track<'x> {
@@ -85,44 +120,6 @@ pub enum TrackType<'a> {
     Other(Box<Track<'a> + 'a>),
 }
 
-
-/// Generic convenience methods for tracks.
-pub trait TrackExt {
-    fn debug(&self) -> String;
-}
-/*
-impl<'a,'b> TrackExt for &'a (Track<'b> + 'b) {
-    fn debug(&self) -> String {
-        use std::fmt::Write; // Shim for write! being duck-typed in io transition
-        let mut result = format!("Track {}\n", self.number());
-        if let Some(codec) = self.codec() {
-            if let Ok(codec) = str::from_utf8(&codec) {
-                write!(&mut result, "  Codec: {}\n", codec);
-            }
-        }
-
-        match self.track_type() {
-            TrackType::Video(video_track) => {
-                write!(&mut result, "  Width: {}\n", video_track.width());
-                write!(&mut result, "  Height: {}\n", video_track.height());
-                write!(&mut result, "  Frame Rate: {}\n", video_track.frame_rate());
-                if let Some(cluster_count) = video_track.cluster_count() {
-                    write!(&mut result, "  Cluster Count: {}\n", cluster_count);
-                }
-            }
-            TrackType::Audio(audio_track) => {
-                write!(&mut result, "  Channels: {}\n", audio_track.channels());
-                write!(&mut result, "  Rate: {}\n", audio_track.sampling_rate());
-                if let Some(cluster_count) = audio_track.cluster_count() {
-                    write!(&mut result, "  Cluster Count: {}\n", cluster_count);
-                }
-            }
-            _ => {}
-        }
-        result
-    }
-}
-*/
 #[allow(missing_copy_implementations)]
 pub struct RegisteredContainerReader {
     pub mime_types: &'static [&'static str],
