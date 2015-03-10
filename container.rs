@@ -17,6 +17,7 @@ use timing::Timestamp;
 use videodecoder;
 
 use libc::{c_double, c_int, c_long};
+use std::str;
 
 pub trait ContainerReader {
     fn track_count(&self) -> u16;
@@ -25,32 +26,32 @@ pub trait ContainerReader {
 
     fn debug(&self, number: c_long) -> String {
         use std::fmt::Write; // Shim for `writeln` being duck-typed during old_io transition
-        
-        let track = self.track_by_number(index);
+
+        let track = self.track_by_number(number);
 
         let mut result = format!("Track {}\n", track.number());
         if let Some(codec) = track.codec() {
             if let Ok(codec) = str::from_utf8(&codec) {
-                writeln!(&mut result, "  Codec: {}", codec);
+                writeln!(&mut result, "  Codec: {}", codec).unwrap();
             }
         }
 
         match track.track_type() {
             TrackType::Video(video_track) => {
-                writeln!(&mut result, " Type: Video");
-                writeln!(&mut result, "  Width: {}", video_track.width());
-                writeln!(&mut result, "  Height: {}", video_track.height());
-                writeln!(&mut result, "  Frame Rate: {}", video_track.frame_rate());
+                writeln!(&mut result, " Type: Video").unwrap();
+                writeln!(&mut result, "  Width: {}", video_track.width()).unwrap();
+                writeln!(&mut result, "  Height: {}", video_track.height()).unwrap();
+                writeln!(&mut result, "  Frame Rate: {}", video_track.frame_rate()).unwrap();
                 if let Some(cluster_count) = video_track.cluster_count() {
-                    writeln!(&mut result, "  Cluster Count: {}", cluster_count);
+                    writeln!(&mut result, "  Cluster Count: {}", cluster_count).unwrap();
                 }
             }
             TrackType::Audio(audio_track) => {
-                writeln!(&mut result, " Type: Audio");
-                writeln!(&mut result, "  Channels: {}", audio_track.channels());
-                writeln!(&mut result, "  Rate: {}", audio_track.sampling_rate());
+                writeln!(&mut result, " Type: Audio").unwrap();
+                writeln!(&mut result, "  Channels: {}", audio_track.channels()).unwrap();
+                writeln!(&mut result, "  Rate: {}", audio_track.sampling_rate()).unwrap();
                 if let Some(cluster_count) = audio_track.cluster_count() {
-                    writeln!(&mut result, "  Cluster Count: {}", cluster_count);
+                    writeln!(&mut result, "  Cluster Count: {}", cluster_count).unwrap();
                 }
             }
             _ => {}

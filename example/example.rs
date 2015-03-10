@@ -7,7 +7,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#![feature(collections, core, env, old_io, libc, old_path, rustc_private, std_misc)]
+#![feature(collections, core, old_io, libc, old_path, rustc_private, std_misc)]
 
 extern crate clock_ticks;
 extern crate libc;
@@ -34,7 +34,7 @@ use sdl2::{INIT_AUDIO, INIT_VIDEO, init};
 use std::cmp;
 use std::env;
 use std::mem;
-use std::old_io::fs::File;
+use std::fs::File;
 use std::old_io::timer;
 use std::slice;
 use std::time::duration::Duration;

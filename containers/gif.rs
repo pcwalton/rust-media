@@ -24,7 +24,8 @@ use std::cell::RefCell;
 use std::i32;
 use std::mem;
 use std::num::FromPrimitive;
-use std::old_io::{BufReader, BufWriter, SeekStyle};
+use std::old_io::{BufReader, BufWriter};
+use std::io::SeekFrom;
 use std::ptr;
 use std::slice;
 use std::marker::PhantomData;
@@ -58,7 +59,7 @@ impl FileType {
                 file: file,
                 next_record_byte_offset: 0,
             };
-            file.next_record_byte_offset = file.reader().tell().unwrap();
+            file.next_record_byte_offset = file.reader().seek(SeekFrom::Current(0)).unwrap();
             Ok(file)
         } else {
             Err(error)
@@ -91,7 +92,7 @@ impl FileType {
     /// records or false if we're done.
     pub fn read_record(&mut self) -> Result<bool,()> {
         let next_record_byte_offset = self.next_record_byte_offset;
-        self.reader().seek(next_record_byte_offset as i64, SeekStyle::SeekSet).unwrap();
+        self.reader().seek(SeekFrom::Start(next_record_byte_offset)).unwrap();
 
         let mut record_type = 0;
         unsafe {
@@ -168,7 +169,7 @@ impl FileType {
             _ => return Ok(false),
         }
 
-        self.next_record_byte_offset = self.reader().tell().unwrap();
+        self.next_record_byte_offset = self.reader().seek(SeekFrom::Current(0)).unwrap();
         Ok(true)
     }
 
