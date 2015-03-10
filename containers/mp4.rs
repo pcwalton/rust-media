@@ -14,11 +14,12 @@ use pixelformat::PixelFormat;
 use streaming::StreamReader;
 use timing::Timestamp;
 use videodecoder;
+use utils;
 
 use libc::{self, c_char, c_double, c_int, c_long, c_void};
 use std::ffi::{CString, CStr};
 use std::mem;
-use std::old_io::SeekStyle;
+use std::io::SeekFrom;
 use std::ptr;
 use std::slice::bytes;
 use std::slice;
@@ -286,7 +287,7 @@ extern "C" fn file_provider_open(name: *const c_char, _: ffi::MP4FileMode) -> *m
 extern "C" fn file_provider_seek(mut handle: *mut c_void, pos: i64) -> c_int {
     unsafe {
         let reader: &mut Box<Box<StreamReader>> = mem::transmute(&mut handle);
-        if reader.seek(pos, SeekStyle::SeekSet).is_ok() {
+        if reader.seek(SeekFrom::Start(pos as u64)).is_ok() {
             0
         } else {
             1
@@ -306,13 +307,13 @@ extern "C" fn file_provider_read(mut handle: *mut c_void,
 
     unsafe {
         let reader: &mut Box<Box<StreamReader>> = mem::transmute(&mut handle);
-        match reader.read_at_least(size as usize,
-                                   slice::from_raw_parts_mut((buffer as *mut u8), size as usize)) {
-            Ok(number_read) => {
-                *nin = number_read as i64;
+        match utils::read_to_full(reader,
+                                  slice::from_raw_parts_mut(buffer as *mut u8, size as usize)) {
+            Ok(_) => {
+                *nin = size;
                 0
             }
-            _ => 1,
+            Err(_) => 1,
         }
     }
 }

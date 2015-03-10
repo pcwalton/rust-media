@@ -40,6 +40,9 @@ branch = "servo"
 
 git = "https://github.com/pcwalton/giflib"
 
+[dependencies]
+byteorder = "0.3.0"
+
 [target.x86_64-apple-darwin.dependencies.core_foundation]
 
 git = "https://github.com/servo/rust-core-foundation"

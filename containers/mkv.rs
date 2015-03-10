@@ -14,19 +14,20 @@ use pixelformat::PixelFormat;
 use streaming::StreamReader;
 use timing::Timestamp;
 use videodecoder;
+use utils;
 
 use libc::{c_char, c_double, c_int, c_long, c_longlong, c_uchar, c_ulong, c_void, size_t};
 use std::ffi::CStr;
 use std::mem;
-use std::old_io::SeekStyle;
+use std::io::SeekFrom;
 use std::ptr;
 use std::slice;
 use std::marker::PhantomData;
 
 const VIDEO_TRACK_TYPE: i32 = 1;
 const AUDIO_TRACK_TYPE: i32 = 2;
-// const SUBTITLE_TRACK_TYPE: i32 = 0x11;
-// const METADATA_TRACK_TYPE: i32 = 0x21;
+#[allow(unused)] const SUBTITLE_TRACK_TYPE: i32 = 0x11;
+#[allow(unused)] const METADATA_TRACK_TYPE: i32 = 0x21;
 
 pub struct MkvReader {
     reader: WebmIMkvReaderRef,
@@ -63,12 +64,12 @@ extern "C" fn read_callback(pos: c_longlong,
 
     unsafe {
         let reader: &mut Box<Box<StreamReader>> = mem::transmute(&mut user_data);
-        if reader.seek(pos, SeekStyle::SeekSet).is_err() {
+        if reader.seek(SeekFrom::Start(pos as u64)).is_err() {
             return -1
         }
-        match reader.read_at_least(len as usize, slice::from_raw_parts_mut(buf, len as usize)) {
-            Ok(number_read) if number_read == len as usize => 0,
-            _ => -1,
+        match utils::read_to_full(reader, slice::from_raw_parts_mut(buf, len as usize)) {
+            Ok(_) => 0,
+            Err(_) => -1,
         }
     }
 }

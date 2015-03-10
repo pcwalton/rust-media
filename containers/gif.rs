@@ -24,10 +24,13 @@ use std::cell::RefCell;
 use std::i32;
 use std::mem;
 use std::num::FromPrimitive;
-use std::old_io::{BufReader, BufWriter, SeekStyle};
+use std::io::{BufReader, BufWriter, Read, Write};
+use std::io::SeekFrom;
 use std::ptr;
 use std::slice;
 use std::marker::PhantomData;
+
+use byteorder::{LittleEndian, WriteBytesExt, ReadBytesExt};
 
 #[repr(C)]
 pub struct FileType {
@@ -58,7 +61,7 @@ impl FileType {
                 file: file,
                 next_record_byte_offset: 0,
             };
-            file.next_record_byte_offset = file.reader().tell().unwrap();
+            file.next_record_byte_offset = file.reader().seek(SeekFrom::Current(0)).unwrap();
             Ok(file)
         } else {
             Err(error)
@@ -91,7 +94,7 @@ impl FileType {
     /// records or false if we're done.
     pub fn read_record(&mut self) -> Result<bool,()> {
         let next_record_byte_offset = self.next_record_byte_offset;
-        self.reader().seek(next_record_byte_offset as i64, SeekStyle::SeekSet).unwrap();
+        self.reader().seek(SeekFrom::Start(next_record_byte_offset)).unwrap();
 
         let mut record_type = 0;
         unsafe {
@@ -168,7 +171,7 @@ impl FileType {
             _ => return Ok(false),
         }
 
-        self.next_record_byte_offset = self.reader().tell().unwrap();
+        self.next_record_byte_offset = self.reader().seek(SeekFrom::Current(0)).unwrap();
         Ok(true)
     }
 
@@ -634,7 +637,7 @@ impl<'a> container::Frame for FrameImpl<'a> {
             None => file.color_map().unwrap(),
         };
 
-        if writer.write_le_u16(color_map.colors().len() as u16).is_err() {
+        if writer.write_u16::<LittleEndian>(color_map.colors().len() as u16).is_err() {
             return Err(())
         }
         for color in color_map.colors().iter() {
@@ -715,7 +718,7 @@ impl videodecoder::VideoDecoder for VideoDecoderImpl {
     fn decode_frame(&self, data: &[u8], presentation_time: &Timestamp)
                     -> Result<Box<videodecoder::DecodedVideoFrame + 'static>,()> {
         let mut reader = BufReader::new(data);
-        let palette_size = match reader.read_le_u16() {
+        let palette_size = match reader.read_u16::<LittleEndian>() {
             Ok(size) => size,
             Err(_) => return Err(()),
         };
@@ -733,10 +736,13 @@ impl videodecoder::VideoDecoder for VideoDecoderImpl {
                 _ => return Err(()),
             }
         }
-        let pixels = match reader.read_to_end() {
-            Ok(pixels) => pixels,
+
+        let mut pixels = vec![];
+        match reader.read_to_end(&mut pixels) {
+            Ok(_) => {}, // Should we check anything here?
             Err(_) => return Err(()),
-        };
+        }
+
         Ok(Box::new(DecodedVideoFrameImpl {
             width: self.width,
             height: self.height,

@@ -7,7 +7,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#![feature(collections, core, env, old_io, libc, old_path, rustc_private, std_misc)]
+#![feature(collections, core, old_io, libc, rustc_private, std_misc)]
 
 extern crate clock_ticks;
 extern crate libc;
@@ -34,7 +34,7 @@ use sdl2::{INIT_AUDIO, INIT_VIDEO, init};
 use std::cmp;
 use std::env;
 use std::mem;
-use std::old_io::fs::File;
+use std::fs::File;
 use std::old_io::timer;
 use std::slice;
 use std::time::duration::Duration;
@@ -232,7 +232,7 @@ fn enqueue_audio_samples(device: &mut AudioDevice<ExampleAudioRenderer>,
     let channels = device.get_spec().channels;
     let input_samples: Vec<_> = input_samples.iter()
                                              .take(2)
-                                             .map(|samples| samples.as_slice())
+                                             .map(|samples| &samples[..])
                                              .collect();
 
     // Make room for the samples in the output buffer.
@@ -246,7 +246,7 @@ fn enqueue_audio_samples(device: &mut AudioDevice<ExampleAudioRenderer>,
     // Perform audio format conversion.
     Float32Planar.convert(&Float32Interleaved,
                           &mut [&mut output.samples[output_index..]],
-                          input_samples.as_slice(),
+                          & input_samples,
                           output_channels as usize).unwrap();
 }
 
@@ -283,10 +283,10 @@ fn upload_image(video_track: &VideoTrack,
 
     // Perform pixel format conversion.
     pixel_format.convert(&output_video_format.media_pixel_format,
-                         output_pixels.as_mut_slice(),
-                         output_strides.as_slice(),
-                         input_pixels.as_slice(),
-                         input_strides.as_slice(),
+                         &mut output_pixels,
+                         & output_strides,
+                         & input_pixels,
+                         & input_strides,
                          output_video_format.sdl_width as usize,
                          height as usize).unwrap();
 }
@@ -299,10 +299,10 @@ fn main() {
     }
 
     let mut sdl_context = sdl2::init(INIT_VIDEO | INIT_AUDIO).ok().expect("Could not start SDL");
-    let file = Box::new(File::open(&Path::new(args[1].as_slice()))
+    let file = Box::new(File::open(&args[1])
                         .ok().expect("Could not open media file"));
 
-    let mut player = Player::new(file, args[2].as_slice());
+    let mut player = Player::new(file, &args[2]);
     let mut media_player = ExampleMediaPlayer::new();
 
     let renderer = player.video_track().map(|video_track| {
@@ -349,7 +349,7 @@ fn main() {
             video_renderer.present(frame.video_frame.unwrap(), &mut player);
         }
         if let Some(ref mut audio_renderer) = audio_renderer {
-            enqueue_audio_samples(audio_renderer, frame.audio_samples.unwrap().as_slice());
+            enqueue_audio_samples(audio_renderer, &frame.audio_samples.unwrap());
         }
 
         if !media_player.poll_events(&mut sdl_context, &mut player) {
