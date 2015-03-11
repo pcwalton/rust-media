@@ -16,12 +16,17 @@ use timing::Timestamp;
 use videodecoder;
 
 use libc::{c_char, c_double, c_int, c_long, c_longlong, c_uchar, c_ulong, c_void, size_t};
-use std::ffi;
+use std::ffi::CStr;
 use std::mem;
-use std::num::FromPrimitive;
-use std::old_io::SeekStyle;
+use std::io::SeekFrom;
 use std::ptr;
 use std::slice;
+use std::marker::PhantomData;
+
+const VIDEO_TRACK_TYPE: i32 = 1;
+const AUDIO_TRACK_TYPE: i32 = 2;
+#[allow(unused)] const SUBTITLE_TRACK_TYPE: i32 = 0x11;
+#[allow(unused)] const METADATA_TRACK_TYPE: i32 = 0x21;
 
 pub struct MkvReader {
     reader: WebmIMkvReaderRef,
@@ -58,10 +63,10 @@ extern "C" fn read_callback(pos: c_longlong,
 
     unsafe {
         let reader: &mut Box<Box<StreamReader>> = mem::transmute(&mut user_data);
-        if reader.seek(pos, SeekStyle::SeekSet).is_err() {
+        if reader.seek(SeekFrom::Start(pos as u64)).is_err() {
             return -1
         }
-        match reader.read_at_least(len as usize, slice::from_raw_mut_buf(&buf, len as usize)) {
+        match reader.read(slice::from_raw_parts_mut(buf, len as usize)) {
             Ok(number_read) if number_read == len as usize => 0,
             _ => -1,
         }
@@ -174,6 +179,7 @@ impl Segment {
         }
         Some(Tracks {
             tracks: tracks,
+            phantom: PhantomData,
         })
     }
 
@@ -188,6 +194,7 @@ impl Segment {
             segment_info: unsafe {
                 WebmSegmentGetInfo(self.segment)
             },
+            phantom: PhantomData,
         }
     }
 
@@ -200,6 +207,7 @@ impl Segment {
         } else {
             Some(Cluster {
                 cluster: result,
+                phantom: PhantomData,
             })
         }
     }
@@ -213,6 +221,7 @@ impl Segment {
         } else {
             Some(Cluster {
                 cluster: result,
+                phantom: PhantomData,
             })
         }
     }
@@ -220,6 +229,7 @@ impl Segment {
 
 pub struct SegmentInfo<'a> {
     segment_info: WebmSegmentInfoRef,
+    phantom: PhantomData<&'a u8>,
 }
 
 impl<'a> SegmentInfo<'a> {
@@ -232,6 +242,7 @@ impl<'a> SegmentInfo<'a> {
 
 pub struct Tracks<'a> {
     tracks: WebmTracksRef,
+    phantom: PhantomData<&'a u8>,
 }
 
 impl<'a> Tracks<'a> {
@@ -245,7 +256,8 @@ impl<'a> Tracks<'a> {
         Track {
             track: unsafe {
                 WebmTracksGetTrackByIndex(self.tracks, index)
-            }
+            },
+            phantom: PhantomData,
         }
     }
 
@@ -253,7 +265,8 @@ impl<'a> Tracks<'a> {
         Track {
             track: unsafe {
                 WebmTracksGetTrackByNumber(self.tracks, number)
-            }
+            },
+            phantom: PhantomData,
         }
     }
 }
@@ -261,13 +274,41 @@ impl<'a> Tracks<'a> {
 #[derive(Clone)]
 pub struct Track<'a> {
     track: WebmTrackRef,
+    phantom: PhantomData<&'a u8>,
 }
 
 impl<'a> Track<'a> {
-    pub fn track_type(&self) -> TrackType {
-        unsafe {
-            FromPrimitive::from_i32(WebmTrackGetType(self.track) as i32).unwrap()
+    pub fn track_type(self) -> TrackType<'a> {
+        let track_type = unsafe { WebmTrackGetType(self.track) as i32 };
+        match track_type {
+            VIDEO_TRACK_TYPE => {
+                TrackType::Video(VideoTrack {
+                    track: unsafe {
+                        mem::transmute::<_,WebmVideoTrackRef>(self.track)
+                    },
+                    phantom: PhantomData,
+                })
+            }
+            AUDIO_TRACK_TYPE => {
+                TrackType::Audio(AudioTrack {
+                    track: unsafe {
+                        mem::transmute::<_,WebmAudioTrackRef>(self.track)
+                    },
+                    phantom: PhantomData,
+                })
+            }
+            _ => TrackType::Other(self),
         }
+    }
+
+    pub fn is_video(&self) -> bool {
+        let track_type = unsafe { WebmTrackGetType(self.track) as i32 };
+        track_type == VIDEO_TRACK_TYPE
+    }
+
+    pub fn is_audio(&self) -> bool {
+        let track_type = unsafe { WebmTrackGetType(self.track) as i32 };
+        track_type == AUDIO_TRACK_TYPE
     }
 
     pub fn number(&self) -> c_long {
@@ -279,7 +320,7 @@ impl<'a> Track<'a> {
     pub fn codec_id<'b>(&'b self) -> &'b [u8] {
         unsafe {
             let ptr = WebmTrackGetCodecId(self.track);
-            let bytes = ffi::c_str_to_bytes(&ptr);
+            let bytes = CStr::from_ptr(ptr).to_bytes();
             mem::transmute::<&[u8],&'b [u8]>(bytes)
         }
     }
@@ -288,29 +329,7 @@ impl<'a> Track<'a> {
         let mut size = 0;
         unsafe {
             let ptr = WebmTrackGetCodecPrivate(self.track, &mut size);
-            mem::transmute::<&[u8],&'b [u8]>(slice::from_raw_buf(&ptr, size as usize))
-        }
-    }
-
-    pub fn as_video_track(&self) -> VideoTrack<'a> {
-        if self.track_type() != TrackType::Video {
-            panic!("Track::as_video_track(): not a video track!")
-        }
-        VideoTrack {
-            track: unsafe {
-                mem::transmute::<_,WebmVideoTrackRef>(self.track)
-            },
-        }
-    }
-
-    pub fn as_audio_track(&self) -> AudioTrack<'a> {
-        if self.track_type() != TrackType::Audio {
-            panic!("Track::as_audio_track(): not an audio track!")
-        }
-        AudioTrack {
-            track: unsafe {
-                mem::transmute::<_,WebmAudioTrackRef>(self.track)
-            },
+            mem::transmute::<&[u8],&'b [u8]>(slice::from_raw_parts(ptr, size as usize))
         }
     }
 }
@@ -318,6 +337,7 @@ impl<'a> Track<'a> {
 #[derive(Clone)]
 pub struct VideoTrack<'a> {
     track: WebmVideoTrackRef,
+    phantom: PhantomData<&'a u8>,
 }
 
 impl<'a> VideoTrack<'a> {
@@ -326,6 +346,7 @@ impl<'a> VideoTrack<'a> {
             track: unsafe {
                 mem::transmute::<_,WebmTrackRef>(self.track)
             },
+            phantom: PhantomData,
         }
     }
 
@@ -351,6 +372,7 @@ impl<'a> VideoTrack<'a> {
 #[derive(Clone)]
 pub struct AudioTrack<'a> {
     track: WebmAudioTrackRef,
+    phantom: PhantomData<&'a u8>,
 }
 
 impl<'a> AudioTrack<'a> {
@@ -359,6 +381,7 @@ impl<'a> AudioTrack<'a> {
             track: unsafe {
                 mem::transmute::<_,WebmTrackRef>(self.track)
             },
+            phantom: PhantomData,
         }
     }
 
@@ -384,6 +407,7 @@ impl<'a> AudioTrack<'a> {
 #[derive(Clone)]
 pub struct Cluster<'a> {
     cluster: WebmClusterRef,
+    phantom: PhantomData<&'a u8>,
 }
 
 impl<'a> Cluster<'a> {
@@ -408,6 +432,7 @@ impl<'a> Cluster<'a> {
         if err >= 0 {
             Ok(BlockEntry {
                 entry: entry,
+                phantom: PhantomData,
             })
         } else {
             Err(err)
@@ -422,6 +447,7 @@ impl<'a> Cluster<'a> {
         if err >= 0 && entry != ptr::null_mut() {
             Ok(BlockEntry {
                 entry: entry,
+                phantom: PhantomData,
             })
         } else {
             Err(err)
@@ -447,6 +473,7 @@ impl<'a> Cluster<'a> {
         if err >= 0 {
             Ok(BlockEntry {
                 entry: entry,
+                phantom: PhantomData,
             })
         } else {
             Err(err)
@@ -478,13 +505,15 @@ pub struct ClusterInfo {
 #[derive(Clone)]
 pub struct BlockEntry<'a> {
     entry: WebmBlockEntryRef,
+    phantom: PhantomData<&'a u8>,
 }
 
 impl<'a> BlockEntry<'a> {
-    pub fn block(&self) -> Block {
+    pub fn block(&self) -> Block<'a> {
         unsafe {
             Block {
                 block: WebmBlockEntryGetBlock(self.entry),
+                phantom: PhantomData,
             }
         }
     }
@@ -499,6 +528,7 @@ impl<'a> BlockEntry<'a> {
 #[derive(Clone)]
 pub struct Block<'a> {
     block: WebmBlockRef,
+    phantom: PhantomData<&'a u8>,
 }
 
 impl<'a> Block<'a> {
@@ -511,7 +541,8 @@ impl<'a> Block<'a> {
     pub fn frame(&self, frame_index: c_int) -> BlockFrame<'a> {
         unsafe {
             BlockFrame {
-                frame: WebmBlockGetFrame(self.block, frame_index)
+                frame: WebmBlockGetFrame(self.block, frame_index),
+                phantom: PhantomData,
             }
         }
     }
@@ -549,6 +580,7 @@ impl<'a> Block<'a> {
 
 pub struct BlockFrame<'a> {
     frame: WebmBlockFrameRef,
+    phantom: PhantomData<&'a u8>,
 }
 
 impl<'a> BlockFrame<'a> {
@@ -577,12 +609,10 @@ impl<'a> BlockFrame<'a> {
     }
 }
 
-#[derive(Clone, Copy, Debug, FromPrimitive, PartialEq)]
-pub enum TrackType {
-    Video = 1,
-    Audio = 2,
-    Subtitle = 0x11,
-    Metadata = 0x21,
+pub enum TrackType<'a> {
+    Video(VideoTrack<'a>),
+    Audio(AudioTrack<'a>),
+    Other(Track<'a>),
 }
 
 // Implementation of the abstract `ContainerReader` interface
@@ -641,14 +671,38 @@ struct TrackImpl<'a> {
     reader: &'a MkvReader,
 }
 
-impl<'a> container::Track for TrackImpl<'a> {
-    fn track_type(&self) -> container::TrackType {
-        match self.track.track_type() {
-            TrackType::Video => container::TrackType::Video,
-            TrackType::Audio => container::TrackType::Audio,
-            _ => container::TrackType::Other,
+impl<'a> container::Track<'a> for TrackImpl<'a> {
+    fn track_type(self: Box<Self>) -> container::TrackType<'a> {
+        let segment = self.segment;
+        let reader = self.reader;
+        let track = self.track;
+        match track.track_type() {
+            TrackType::Video(track) => {
+                container::TrackType::Video(Box::new(VideoTrackImpl {
+                    track: track,
+                    segment: segment,
+                    reader: reader,
+                }) as Box<container::VideoTrack<'a> + 'a>)
+            }
+            TrackType::Audio(track) => {
+                container::TrackType::Audio(Box::new(AudioTrackImpl {
+                    track: track,
+                    segment: segment,
+                    reader: reader,
+                }) as Box<container::AudioTrack<'a> + 'a>)
+            }
+            TrackType::Other(track) => {
+                container::TrackType::Other(Box::new(TrackImpl {
+                    track: track,
+                    segment: segment,
+                    reader: reader,
+                }) as Box<container::Track<'a> + 'a>)
+            }
         }
     }
+    fn is_video(&self) -> bool { self.track.is_video() }
+    fn is_audio(&self) -> bool { self.track.is_audio() }
+
 
     fn cluster_count(&self) -> Option<c_int> {
         Some(self.segment.count() as c_int)
@@ -665,28 +719,6 @@ impl<'a> container::Track for TrackImpl<'a> {
     fn cluster<'b>(&'b self, cluster_index: i32) -> Result<Box<container::Cluster + 'b>,()> {
         Ok(get_cluster(cluster_index, self.segment, self.reader))
     }
-
-    fn as_video_track<'b>(&'b self) -> Result<Box<container::VideoTrack + 'b>,()> {
-        if self.track.track_type() != TrackType::Video {
-            return Err(())
-        }
-        Ok(Box::new(VideoTrackImpl {
-            track: self.track.as_video_track(),
-            segment: self.segment,
-            reader: self.reader,
-        }) as Box<container::VideoTrack + 'b>)
-    }
-
-    fn as_audio_track<'b>(&'b self) -> Result<Box<container::AudioTrack + 'b>,()> {
-        if self.track.track_type() != TrackType::Audio {
-            return Err(())
-        }
-        Ok(Box::new(AudioTrackImpl {
-            track: self.track.as_audio_track(),
-            segment: self.segment,
-            reader: self.reader,
-        }) as Box<container::AudioTrack + 'b>)
-    }
 }
 
 #[derive(Clone)]
@@ -696,10 +728,13 @@ struct VideoTrackImpl<'a> {
     reader: &'a MkvReader,
 }
 
-impl<'a> container::Track for VideoTrackImpl<'a> {
-    fn track_type(&self) -> container::TrackType {
-        container::TrackType::Video
+impl<'a> container::Track<'a> for VideoTrackImpl<'a> {
+    fn track_type(self: Box<Self>) -> container::TrackType<'a> {
+        container::TrackType::Video(self as Box<container::VideoTrack<'a> + 'a>)
     }
+
+    fn is_video(&self) -> bool { true }
+    fn is_audio(&self) -> bool { false }
 
     fn cluster_count(&self) -> Option<c_int> {
         Some(self.segment.count() as c_int)
@@ -709,6 +744,7 @@ impl<'a> container::Track for VideoTrackImpl<'a> {
         self.track.as_track().number()
     }
 
+
     fn cluster<'b>(&'b self, cluster_index: i32) -> Result<Box<container::Cluster + 'b>,()> {
         Ok(get_cluster(cluster_index, self.segment, self.reader))
     }
@@ -716,17 +752,9 @@ impl<'a> container::Track for VideoTrackImpl<'a> {
     fn codec(&self) -> Option<Vec<u8>> {
         codec_id_to_fourcc(self.track.as_track().codec_id())
     }
-
-    fn as_video_track<'b>(&'b self) -> Result<Box<container::VideoTrack + 'b>,()> {
-        Ok(Box::new((*self).clone()) as Box<container::VideoTrack + 'b>)
-    }
-
-    fn as_audio_track<'b>(&'b self) -> Result<Box<container::AudioTrack + 'b>,()> {
-        Err(())
-    }
 }
 
-impl<'a> container::VideoTrack for VideoTrackImpl<'a> {
+impl<'a> container::VideoTrack<'a> for VideoTrackImpl<'a> {
     fn width(&self) -> u16 {
         self.track.width() as u16
     }
@@ -756,10 +784,13 @@ struct AudioTrackImpl<'a> {
     reader: &'a MkvReader,
 }
 
-impl<'a> container::Track for AudioTrackImpl<'a> {
-    fn track_type(&self) -> container::TrackType {
-        container::TrackType::Audio
+impl<'a> container::Track<'a> for AudioTrackImpl<'a> {
+    fn track_type(self: Box<Self>) -> container::TrackType<'a> {
+        container::TrackType::Audio(self as Box<container::AudioTrack<'a> + 'a>)
     }
+
+    fn is_video(&self) -> bool { false }
+    fn is_audio(&self) -> bool { true }
 
     fn cluster_count(&self) -> Option<c_int> {
         Some(self.segment.count() as c_int)
@@ -776,17 +807,9 @@ impl<'a> container::Track for AudioTrackImpl<'a> {
     fn codec(&self) -> Option<Vec<u8>> {
         codec_id_to_fourcc(self.track.as_track().codec_id())
     }
-
-    fn as_video_track<'b>(&'b self) -> Result<Box<container::VideoTrack + 'b>,()> {
-        Err(())
-    }
-
-    fn as_audio_track<'b>(&'b self) -> Result<Box<container::AudioTrack + 'b>,()> {
-        Ok(Box::new((*self).clone()) as Box<container::AudioTrack + 'b>)
-    }
 }
 
-impl<'a> container::AudioTrack for AudioTrackImpl<'a> {
+impl<'a> container::AudioTrack<'a> for AudioTrackImpl<'a> {
     fn sampling_rate(&self) -> c_double {
         self.track.sampling_rate()
     }

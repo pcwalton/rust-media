@@ -21,12 +21,49 @@ use std::str;
 
 pub trait ContainerReader {
     fn track_count(&self) -> u16;
-    fn track_by_index<'a>(&'a self, index: u16) -> Box<Track + 'a>;
-    fn track_by_number<'a>(&'a self, number: c_long) -> Box<Track + 'a>;
+    fn track_by_index<'a>(&'a self, index: u16) -> Box<Track<'a> + 'a>;
+    fn track_by_number<'a>(&'a self, number: c_long) -> Box<Track<'a> + 'a>;
+
+    fn debug(&self, number: c_long) -> String {
+        use std::fmt::Write; // Shim for `writeln` being duck-typed during old_io transition
+
+        let track = self.track_by_number(number);
+
+        let mut result = format!("Track {}\n", track.number());
+        if let Some(codec) = track.codec() {
+            if let Ok(codec) = str::from_utf8(&codec) {
+                writeln!(&mut result, "  Codec: {}", codec).unwrap();
+            }
+        }
+
+        match track.track_type() {
+            TrackType::Video(video_track) => {
+                writeln!(&mut result, " Type: Video").unwrap();
+                writeln!(&mut result, "  Width: {}", video_track.width()).unwrap();
+                writeln!(&mut result, "  Height: {}", video_track.height()).unwrap();
+                writeln!(&mut result, "  Frame Rate: {}", video_track.frame_rate()).unwrap();
+                if let Some(cluster_count) = video_track.cluster_count() {
+                    writeln!(&mut result, "  Cluster Count: {}", cluster_count).unwrap();
+                }
+            }
+            TrackType::Audio(audio_track) => {
+                writeln!(&mut result, " Type: Audio").unwrap();
+                writeln!(&mut result, "  Channels: {}", audio_track.channels()).unwrap();
+                writeln!(&mut result, "  Rate: {}", audio_track.sampling_rate()).unwrap();
+                if let Some(cluster_count) = audio_track.cluster_count() {
+                    writeln!(&mut result, "  Cluster Count: {}", cluster_count).unwrap();
+                }
+            }
+            _ => {}
+        }
+        result
+    }
 }
 
-pub trait Track {
-    fn track_type(&self) -> TrackType;
+pub trait Track<'x> {
+    fn track_type(self: Box<Self>) -> TrackType<'x>;
+    fn is_video(&self) -> bool;
+    fn is_audio(&self) -> bool;
 
     /// Returns the number of clusters in this track, if possible. Returns `None` if this container
     /// has no table of contents (so the number of clusters is unknown).
@@ -35,11 +72,9 @@ pub trait Track {
     fn number(&self) -> c_long;
     fn codec(&self) -> Option<Vec<u8>>;
     fn cluster<'a>(&'a self, cluster_index: i32) -> Result<Box<Cluster + 'a>,()>;
-    fn as_video_track<'a>(&'a self) -> Result<Box<VideoTrack + 'a>,()>;
-    fn as_audio_track<'a>(&'a self) -> Result<Box<AudioTrack + 'a>,()>;
 }
 
-pub trait VideoTrack : Track {
+pub trait VideoTrack<'a> : Track<'a> {
     /// Returns the width of this track in pixels.
     fn width(&self) -> u16;
 
@@ -58,7 +93,7 @@ pub trait VideoTrack : Track {
 	fn headers(&self) -> Box<videodecoder::VideoHeaders>;
 }
 
-pub trait AudioTrack : Track {
+pub trait AudioTrack<'a> : Track<'a> {
     fn sampling_rate(&self) -> c_double;
     fn channels(&self) -> u16;
     fn headers(&self) -> Box<audiodecoder::AudioHeaders>;
@@ -80,51 +115,10 @@ pub trait Frame {
     fn rendering_offset(&self) -> i64;
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub enum TrackType {
-    Video,
-    Audio,
-    Other,
-}
-
-/// Generic convenience methods for tracks.
-pub trait TrackExt {
-    fn debug(&self) -> String;
-}
-
-impl<'a,'b> TrackExt for &'a (Track + 'b) {
-    fn debug(&self) -> String {
-        let mut result = format!("Track {}\n", self.number());
-        result.push_str(format!("  Type: {:?}\n", self.track_type()).as_slice());
-        if let Some(codec) = self.codec() {
-            if let Ok(codec) = str::from_utf8(codec.as_slice()) {
-                result.push_str(format!("  Codec: {}\n", codec).as_slice());
-            }
-        }
-
-        match self.track_type() {
-            TrackType::Video => {
-                let video_track = self.as_video_track().unwrap();
-                result.push_str(format!("  Width: {}\n", video_track.width()).as_slice());
-                result.push_str(format!("  Height: {}\n", video_track.height()).as_slice());
-                result.push_str(format!("  Frame Rate: {}\n",
-                                        video_track.frame_rate()).as_slice());
-                if let Some(cluster_count) = video_track.cluster_count() {
-                    result.push_str(format!("  Cluster Count: {}\n", cluster_count).as_slice());
-                }
-            }
-            TrackType::Audio => {
-                let audio_track = self.as_audio_track().unwrap();
-                result.push_str(format!("  Channels: {}\n", audio_track.channels()).as_slice());
-                result.push_str(format!("  Rate: {}\n", audio_track.sampling_rate()).as_slice());
-                if let Some(cluster_count) = audio_track.cluster_count() {
-                    result.push_str(format!("  Cluster Count: {}\n", cluster_count).as_slice());
-                }
-            }
-            _ => {}
-        }
-        result
-    }
+pub enum TrackType<'a> {
+    Video(Box<VideoTrack<'a> + 'a>),
+    Audio(Box<AudioTrack<'a> + 'a>),
+    Other(Box<Track<'a> + 'a>),
 }
 
 #[allow(missing_copy_implementations)]
@@ -136,7 +130,7 @@ pub struct RegisteredContainerReader {
 
 impl RegisteredContainerReader {
     pub fn get(mime_type: &str) -> Result<&'static RegisteredContainerReader,()> {
-        for container_reader in CONTAINER_READERS.iter() {
+        for container_reader in &CONTAINER_READERS {
             if container_reader.mime_types.iter().any(|mime| mime == &mime_type) {
                 return Ok(container_reader)
             }
