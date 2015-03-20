@@ -14,11 +14,12 @@ use pixelformat::PixelFormat;
 use streaming::StreamReader;
 use timing::Timestamp;
 use videodecoder;
+use utils;
 
 use libc::{self, c_char, c_double, c_int, c_long, c_void};
 use std::ffi::{CString, CStr};
 use std::mem;
-use std::old_io::SeekStyle;
+use std::io::SeekFrom;
 use std::ptr;
 use std::slice::bytes;
 use std::slice;
@@ -286,7 +287,7 @@ extern "C" fn file_provider_open(name: *const c_char, _: ffi::MP4FileMode) -> *m
 extern "C" fn file_provider_seek(mut handle: *mut c_void, pos: i64) -> c_int {
     unsafe {
         let reader: &mut Box<Box<StreamReader>> = mem::transmute(&mut handle);
-        if reader.seek(pos, SeekStyle::SeekSet).is_ok() {
+        if reader.seek(SeekFrom::Start(pos as u64)).is_ok() {
             0
         } else {
             1
@@ -306,13 +307,13 @@ extern "C" fn file_provider_read(mut handle: *mut c_void,
 
     unsafe {
         let reader: &mut Box<Box<StreamReader>> = mem::transmute(&mut handle);
-        match reader.read_at_least(size as usize,
-                                   slice::from_raw_parts_mut((buffer as *mut u8), size as usize)) {
-            Ok(number_read) => {
-                *nin = number_read as i64;
+        match utils::read_to_full(reader,
+                                  slice::from_raw_parts_mut(buffer as *mut u8, size as usize)) {
+            Ok(_) => {
+                *nin = size;
                 0
             }
-            _ => 1,
+            Err(_) => 1,
         }
     }
 }
@@ -435,16 +436,31 @@ pub struct TrackImpl<'a> {
     handle: &'a Mp4FileHandle,
 }
 
-impl<'a> container::Track for TrackImpl<'a> {
-    fn track_type(&self) -> container::TrackType {
+impl<'a> container::Track<'a> for TrackImpl<'a> {
+    fn track_type(self: Box<Self>) -> container::TrackType<'a> {
         let track_type = self.handle.track_type(self.id);
+
         if track_type == ffi::MP4_VIDEO_TRACK_TYPE {
-            container::TrackType::Video
+            container::TrackType::Video(Box::new(VideoTrackImpl {
+                id: self.id,
+                handle: self.handle,
+            }) as Box<container::VideoTrack + 'a>)
         } else if track_type == ffi::MP4_AUDIO_TRACK_TYPE {
-            container::TrackType::Audio
+            container::TrackType::Audio(Box::new(AudioTrackImpl {
+                id: self.id,
+                handle: self.handle,
+            }) as Box<container::AudioTrack + 'a>)
         } else {
-            container::TrackType::Other
+            container::TrackType::Other(self as Box<container::Track<'a> + 'a>)
         }
+    }
+
+    fn is_video(&self) -> bool {
+        self.handle.track_type(self.id) == ffi::MP4_VIDEO_TRACK_TYPE
+    }
+
+    fn is_audio(&self) -> bool {
+        self.handle.track_type(self.id) == ffi::MP4_AUDIO_TRACK_TYPE
     }
 
     fn cluster_count(&self) -> Option<c_int> {
@@ -465,26 +481,6 @@ impl<'a> container::Track for TrackImpl<'a> {
             handle: self.handle,
         }) as Box<container::Cluster + 'a>)
     }
-
-    fn as_video_track<'b>(&'b self) -> Result<Box<container::VideoTrack + 'b>,()> {
-        if self.handle.track_type(self.id) != ffi::MP4_VIDEO_TRACK_TYPE {
-            return Err(())
-        }
-        Ok(Box::new(VideoTrackImpl {
-            id: self.id,
-            handle: self.handle,
-        }) as Box<container::VideoTrack + 'a>)
-    }
-
-    fn as_audio_track<'b>(&'b self) -> Result<Box<container::AudioTrack + 'b>,()> {
-        if self.handle.track_type(self.id) != ffi::MP4_AUDIO_TRACK_TYPE {
-            return Err(())
-        }
-        Ok(Box::new(AudioTrackImpl {
-            id: self.id,
-            handle: self.handle,
-        }) as Box<container::AudioTrack + 'a>)
-    }
 }
 
 #[derive(Clone)]
@@ -493,10 +489,13 @@ pub struct VideoTrackImpl<'a> {
     handle: &'a Mp4FileHandle,
 }
 
-impl<'a> container::Track for VideoTrackImpl<'a> {
-    fn track_type(&self) -> container::TrackType {
-        container::TrackType::Video
+impl<'a> container::Track<'a> for VideoTrackImpl<'a> {
+    fn track_type(self: Box<Self>) -> container::TrackType<'a> {
+        container::TrackType::Video(Box::new((*self).clone()) as Box<container::VideoTrack + 'a>)
     }
+
+    fn is_video(&self) -> bool { true }
+    fn is_audio(&self) -> bool { false }
 
     fn cluster_count(&self) -> Option<c_int> {
         Some(1)
@@ -518,17 +517,9 @@ impl<'a> container::Track for VideoTrackImpl<'a> {
             handle: self.handle,
         }) as Box<container::Cluster + 'a>)
     }
-
-    fn as_video_track<'b>(&'b self) -> Result<Box<container::VideoTrack + 'b>,()> {
-        Ok(Box::new((*self).clone()) as Box<container::VideoTrack + 'b>)
-    }
-
-    fn as_audio_track<'b>(&'b self) -> Result<Box<container::AudioTrack + 'b>,()> {
-        Err(())
-    }
 }
 
-impl<'a> container::VideoTrack for VideoTrackImpl<'a> {
+impl<'a> container::VideoTrack<'a> for VideoTrackImpl<'a> {
     fn width(&self) -> u16 {
         self.handle.width(self.id)
     }
@@ -565,10 +556,13 @@ pub struct AudioTrackImpl<'a> {
     handle: &'a Mp4FileHandle,
 }
 
-impl<'a> container::Track for AudioTrackImpl<'a> {
-    fn track_type(&self) -> container::TrackType {
-        container::TrackType::Audio
+impl<'a> container::Track<'a> for AudioTrackImpl<'a> {
+    fn track_type(self: Box<Self>) -> container::TrackType<'a> {
+        container::TrackType::Audio(Box::new((*self).clone()) as Box<container::AudioTrack<'a> + 'a>)
     }
+
+    fn is_video(&self) -> bool { false }
+    fn is_audio(&self) -> bool { false }
 
     fn cluster_count(&self) -> Option<c_int> {
         Some(1)
@@ -588,17 +582,9 @@ impl<'a> container::Track for AudioTrackImpl<'a> {
             handle: self.handle,
         }) as Box<container::Cluster + 'a>)
     }
-
-    fn as_video_track<'b>(&'b self) -> Result<Box<container::VideoTrack + 'b>,()> {
-        Err(())
-    }
-
-    fn as_audio_track<'b>(&'b self) -> Result<Box<container::AudioTrack + 'b>,()> {
-        Ok(Box::new((*self).clone()) as Box<container::AudioTrack + 'b>)
-    }
 }
 
-impl<'a> container::AudioTrack for AudioTrackImpl<'a> {
+impl<'a> container::AudioTrack<'a> for AudioTrackImpl<'a> {
     fn channels(&self) -> u16 {
         // FIXME(pcwalton): This was determined experimentally and I was unable to find
         // documentation that matches the MP4 examples I have. Is it right?
@@ -692,8 +678,8 @@ fn get_codec(handle: &Mp4FileHandle, id: ffi::MP4TrackId) -> Option<Vec<u8>> {
     for &(key, value) in TABLE.iter() {
         let mut path: Vec<u8> = b"mdia.minf.stbl.stsd.".iter().map(|x| *x).collect();
         path.push_all(key);
-        if handle.have_track_atom(id, path.as_slice()) {
-            return Some(value.iter().map(|x| *x).collect())
+        if handle.have_track_atom(id, &path) {
+            return Some(value.iter().cloned().collect())
         }
     }
     None

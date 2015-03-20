@@ -7,7 +7,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#![feature(collections, core, env, old_io, libc, old_path, rustc_private, std_misc)]
+#![feature(collections, core, old_io, libc, rustc_private, std_misc)]
 
 extern crate clock_ticks;
 extern crate libc;
@@ -17,9 +17,8 @@ extern crate sdl2;
 #[macro_use]
 extern crate log;
 
-use libc::c_long;
 use media::audioformat::{ConvertAudioFormat, Float32Interleaved, Float32Planar};
-use media::container::{AudioTrack, ContainerReader, Frame, Track, VideoTrack};
+use media::container::{AudioTrack, Frame, VideoTrack};
 use media::pixelformat::{ConvertPixelFormat, PixelFormat, Rgb24};
 use media::playback::Player;
 use media::videodecoder::{DecodedVideoFrame, VideoDecoder};
@@ -35,7 +34,7 @@ use sdl2::{INIT_AUDIO, INIT_VIDEO, init};
 use std::cmp;
 use std::env;
 use std::mem;
-use std::old_io::fs::File;
+use std::fs::File;
 use std::old_io::timer;
 use std::slice;
 use std::time::duration::Duration;
@@ -112,10 +111,7 @@ impl<'a> ExampleVideoRenderer<'a> {
     }
 
     fn present(&mut self, image: Box<DecodedVideoFrame + 'static>, player: &mut Player) {
-        let video_track_number = player.video_track_number().unwrap();
-        let reader = &mut *player.reader;
-        let video_track = reader.track_by_number(video_track_number as c_long);
-        let video_track = video_track.as_video_track().unwrap();
+        let video_track = player.video_track().unwrap();
 
         let rect = if let &RendererParent::Window(ref window) = self.renderer.get_parent() {
             let (width, height) = window.get_size();
@@ -236,7 +232,7 @@ fn enqueue_audio_samples(device: &mut AudioDevice<ExampleAudioRenderer>,
     let channels = device.get_spec().channels;
     let input_samples: Vec<_> = input_samples.iter()
                                              .take(2)
-                                             .map(|samples| samples.as_slice())
+                                             .map(|samples| &samples[..])
                                              .collect();
 
     // Make room for the samples in the output buffer.
@@ -250,7 +246,7 @@ fn enqueue_audio_samples(device: &mut AudioDevice<ExampleAudioRenderer>,
     // Perform audio format conversion.
     Float32Planar.convert(&Float32Interleaved,
                           &mut [&mut output.samples[output_index..]],
-                          input_samples.as_slice(),
+                          & input_samples,
                           output_channels as usize).unwrap();
 }
 
@@ -287,10 +283,10 @@ fn upload_image(video_track: &VideoTrack,
 
     // Perform pixel format conversion.
     pixel_format.convert(&output_video_format.media_pixel_format,
-                         output_pixels.as_mut_slice(),
-                         output_strides.as_slice(),
-                         input_pixels.as_slice(),
-                         input_strides.as_slice(),
+                         &mut output_pixels,
+                         & output_strides,
+                         & input_pixels,
+                         & input_strides,
                          output_video_format.sdl_width as usize,
                          height as usize).unwrap();
 }
@@ -302,17 +298,14 @@ fn main() {
         return
     }
 
-    println!("foo");
     let mut sdl_context = sdl2::init(INIT_VIDEO | INIT_AUDIO).ok().expect("Could not start SDL");
-    let file = Box::new(File::open(&Path::new(args[1].as_slice()))
+    let file = Box::new(File::open(&args[1])
                         .ok().expect("Could not open media file"));
 
-    let mut player = Player::new(file, args[2].as_slice());
+    let mut player = Player::new(file, &args[2]);
     let mut media_player = ExampleMediaPlayer::new();
 
-    let renderer = player.video_track_number().map(|video_track_number| {
-        let video_track = player.reader.track_by_number(video_track_number as c_long);
-        let video_track = video_track.as_video_track().ok().expect("Could not get video track");
+    let renderer = player.video_track().map(|video_track| {
         let window = Window::new("rust-media example",
                                  WindowPos::PosCentered,
                                  WindowPos::PosCentered,
@@ -322,18 +315,14 @@ fn main() {
         Renderer::from_window(window, RenderDriverIndex::Auto, ACCELERATED | PRESENTVSYNC)
             .ok().expect("could not render window")
     });
-    let mut video_renderer = player.video_track_number().map(|video_track_number| {
-        let video_track = player.reader.track_by_number(video_track_number as c_long);
-        let video_track = video_track.as_video_track().ok().expect("Could not get video track");
+    let mut video_renderer = player.video_track().map(|video_track| {
         let video_format = SdlVideoFormat::from_video_track(&*video_track);
         ExampleVideoRenderer::new(renderer.as_ref().expect("Could not get renderer"),
                                   video_format,
                                   video_track.height() as i32)
     });
 
-    let mut audio_renderer = player.audio_track_number().map(|audio_track_number| {
-        let audio_track = player.reader.track_by_number(audio_track_number as c_long);
-        let audio_track = audio_track.as_audio_track().ok().expect("Could not get audio track");
+    let mut audio_renderer = player.audio_track().map(|audio_track| {
         let renderer = ExampleAudioRenderer::new(audio_track.sampling_rate(),
                                                  audio_track.channels());
         renderer.resume();
@@ -360,7 +349,7 @@ fn main() {
             video_renderer.present(frame.video_frame.unwrap(), &mut player);
         }
         if let Some(ref mut audio_renderer) = audio_renderer {
-            enqueue_audio_samples(audio_renderer, frame.audio_samples.unwrap().as_slice());
+            enqueue_audio_samples(audio_renderer, &frame.audio_samples.unwrap());
         }
 
         if !media_player.poll_events(&mut sdl_context, &mut player) {

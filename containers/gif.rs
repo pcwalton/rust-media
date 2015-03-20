@@ -24,10 +24,13 @@ use std::cell::RefCell;
 use std::i32;
 use std::mem;
 use std::num::FromPrimitive;
-use std::old_io::{BufReader, BufWriter, SeekStyle};
+use std::io::{BufReader, BufWriter, Read, Write};
+use std::io::SeekFrom;
 use std::ptr;
 use std::slice;
 use std::marker::PhantomData;
+
+use byteorder::{LittleEndian, WriteBytesExt, ReadBytesExt};
 
 #[repr(C)]
 pub struct FileType {
@@ -58,7 +61,7 @@ impl FileType {
                 file: file,
                 next_record_byte_offset: 0,
             };
-            file.next_record_byte_offset = file.reader().tell().unwrap();
+            file.next_record_byte_offset = file.reader().seek(SeekFrom::Current(0)).unwrap();
             Ok(file)
         } else {
             Err(error)
@@ -91,7 +94,7 @@ impl FileType {
     /// records or false if we're done.
     pub fn read_record(&mut self) -> Result<bool,()> {
         let next_record_byte_offset = self.next_record_byte_offset;
-        self.reader().seek(next_record_byte_offset as i64, SeekStyle::SeekSet).unwrap();
+        self.reader().seek(SeekFrom::Start(next_record_byte_offset)).unwrap();
 
         let mut record_type = 0;
         unsafe {
@@ -168,7 +171,7 @@ impl FileType {
             _ => return Ok(false),
         }
 
-        self.next_record_byte_offset = self.reader().tell().unwrap();
+        self.next_record_byte_offset = self.reader().seek(SeekFrom::Current(0)).unwrap();
         Ok(true)
     }
 
@@ -481,10 +484,15 @@ struct TrackImpl<'a> {
     file: &'a RefCell<FileType>,
 }
 
-impl<'a> container::Track for TrackImpl<'a> {
-    fn track_type(&self) -> container::TrackType {
-        container::TrackType::Video
+impl<'a> container::Track<'a> for TrackImpl<'a> {
+    fn track_type(self: Box<Self>) -> container::TrackType<'a> {
+        container::TrackType::Video(Box::new(VideoTrackImpl {
+            file: self.file,
+        }) as Box<container::VideoTrack<'a> + 'a>)
     }
+
+    fn is_video(&self) -> bool { true }
+    fn is_audio(&self) -> bool { false }
 
     fn cluster_count(&self) -> Option<c_int> {
         None
@@ -500,16 +508,6 @@ impl<'a> container::Track for TrackImpl<'a> {
 
     fn cluster<'b>(&'b self, cluster_index: i32) -> Result<Box<container::Cluster + 'b>,()> {
         get_cluster(self.file, cluster_index)
-    }
-
-    fn as_video_track<'b>(&'b self) -> Result<Box<container::VideoTrack + 'b>,()> {
-        Ok(Box::new(VideoTrackImpl {
-            file: self.file,
-        }) as Box<container::VideoTrack + 'b>)
-    }
-
-    fn as_audio_track<'b>(&'b self) -> Result<Box<container::AudioTrack + 'b>,()> {
-        Err(())
     }
 }
 
@@ -517,10 +515,15 @@ struct VideoTrackImpl<'a> {
     file: &'a RefCell<FileType>,
 }
 
-impl<'a> container::Track for VideoTrackImpl<'a> {
-    fn track_type(&self) -> container::TrackType {
-        container::TrackType::Video
+impl<'a> container::Track<'a> for VideoTrackImpl<'a> {
+    fn track_type(self: Box<Self>) -> container::TrackType<'a> {
+        container::TrackType::Video(Box::new(VideoTrackImpl {
+            file: self.file,
+        }) as Box<container::VideoTrack<'a> + 'a>)
     }
+
+    fn is_video(&self) -> bool { true }
+    fn is_audio(&self) -> bool { false }
 
     fn cluster_count(&self) -> Option<c_int> {
         None
@@ -537,19 +540,9 @@ impl<'a> container::Track for VideoTrackImpl<'a> {
     fn cluster<'b>(&'b self, cluster_index: i32) -> Result<Box<container::Cluster + 'b>,()> {
         get_cluster(self.file, cluster_index)
     }
-
-    fn as_video_track<'b>(&'b self) -> Result<Box<container::VideoTrack + 'b>,()> {
-        Ok(Box::new(VideoTrackImpl {
-            file: self.file,
-        }) as Box<container::VideoTrack + 'b>)
-    }
-
-    fn as_audio_track<'b>(&'b self) -> Result<Box<container::AudioTrack + 'b>,()> {
-        Err(())
-    }
 }
 
-impl<'a> container::VideoTrack for VideoTrackImpl<'a> {
+impl<'a> container::VideoTrack<'a> for VideoTrackImpl<'a> {
     fn width(&self) -> u16 {
         self.file.borrow().width() as u16
     }
@@ -644,7 +637,7 @@ impl<'a> container::Frame for FrameImpl<'a> {
             None => file.color_map().unwrap(),
         };
 
-        if writer.write_le_u16(color_map.colors().len() as u16).is_err() {
+        if writer.write_u16::<LittleEndian>(color_map.colors().len() as u16).is_err() {
             return Err(())
         }
         for color in color_map.colors().iter() {
@@ -725,7 +718,7 @@ impl videodecoder::VideoDecoder for VideoDecoderImpl {
     fn decode_frame(&self, data: &[u8], presentation_time: &Timestamp)
                     -> Result<Box<videodecoder::DecodedVideoFrame + 'static>,()> {
         let mut reader = BufReader::new(data);
-        let palette_size = match reader.read_le_u16() {
+        let palette_size = match reader.read_u16::<LittleEndian>() {
             Ok(size) => size,
             Err(_) => return Err(()),
         };
@@ -743,10 +736,13 @@ impl videodecoder::VideoDecoder for VideoDecoderImpl {
                 _ => return Err(()),
             }
         }
-        let pixels = match reader.read_to_end() {
-            Ok(pixels) => pixels,
+
+        let mut pixels = vec![];
+        match reader.read_to_end(&mut pixels) {
+            Ok(_) => {}, // Should we check anything here?
             Err(_) => return Err(()),
-        };
+        }
+
         Ok(Box::new(DecodedVideoFrameImpl {
             width: self.width,
             height: self.height,
@@ -780,7 +776,7 @@ impl videodecoder::DecodedVideoFrame for DecodedVideoFrameImpl {
 
     fn pixel_format<'a>(&'a self) -> PixelFormat<'a> {
         PixelFormat::Indexed(Palette {
-            palette: self.palette.as_slice(),
+            palette: &self.palette,
         })
     }
 
@@ -790,7 +786,7 @@ impl videodecoder::DecodedVideoFrame for DecodedVideoFrameImpl {
 
     fn lock<'a>(&'a self) -> Box<videodecoder::DecodedVideoFrameLockGuard + 'a> {
         Box::new(DecodedVideoFrameLockGuardImpl {
-            pixels: self.pixels.as_slice(),
+            pixels: &self.pixels,
         }) as Box<videodecoder::DecodedVideoFrameLockGuard + 'a>
     }
 }
