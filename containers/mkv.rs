@@ -932,7 +932,7 @@ fn codec_id_to_fourcc(id: &[u8]) -> Option<Vec<u8>> {
 fn get_cluster<'a>(cluster_index: i32, segment: &'a Segment, reader: &'a MkvReader)
                    -> Box<container::Cluster + 'a> {
     let mut cluster = segment.first().unwrap();
-    for _ in range(0, cluster_index) {
+    for _ in 0 .. cluster_index {
         cluster = segment.next(cluster).unwrap();
     }
 

@@ -29,7 +29,7 @@ pub type CMItemIndex = c_long;
 const kCMTimeFlags_Valid: CMTimeFlags = 1 << 0;
 
 #[repr(C)]
-#[derive(Copy)]
+#[derive(Copy, Clone)]
 pub struct CMTime {
     pub value: CMTimeValue,
     pub timescale: CMTimeScale,
@@ -73,7 +73,7 @@ impl CMTime {
 }
 
 #[repr(C)]
-#[derive(Copy)]
+#[derive(Copy, Clone)]
 pub struct CMSampleTimingInfo {
     pub duration: CMTime,
     pub presentation_time_stamp: CMTime,
@@ -122,7 +122,7 @@ impl TCFType<ffi::CMFormatDescriptionRef> for CMFormatDescription {
             description: description,
         }
     }
-    fn type_id(_: Option<CMFormatDescription>) -> CFTypeID {
+    fn type_id() -> CFTypeID {
         unsafe {
             ffi::CMFormatDescriptionGetTypeID()
         }
@@ -183,7 +183,7 @@ impl TCFType<ffi::CMBlockBufferRef> for CMBlockBuffer {
             buffer: buffer,
         }
     }
-    fn type_id(_: Option<CMBlockBuffer>) -> CFTypeID {
+    fn type_id() -> CFTypeID {
         unsafe {
             ffi::CMBlockBufferGetTypeID()
         }
@@ -258,7 +258,7 @@ impl TCFType<ffi::CMSampleBufferRef> for CMSampleBuffer {
             buffer: buffer,
         }
     }
-    fn type_id(_: Option<CMSampleBuffer>) -> CFTypeID {
+    fn type_id() -> CFTypeID {
         unsafe {
             ffi::CMSampleBufferGetTypeID()
         }
@@ -277,7 +277,7 @@ impl CMSampleBuffer {
             ffi::CMSampleBufferCreate(kCFAllocatorDefault,
                                       block_buffer.as_concrete_TypeRef(),
                                       data_ready as Boolean,
-                                      mem::transmute(0us),
+                                      mem::transmute(0usize),
                                       ptr::null_mut(),
                                       format_description.as_concrete_TypeRef(),
                                       num_samples,

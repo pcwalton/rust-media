@@ -298,7 +298,7 @@ pub enum AudioCodecProperty {
 }
 
 #[repr(u32)]
-#[derive(Copy)]
+#[derive(Copy, Clone)]
 pub enum AudioCodecPropertyId {
     SupportedInputFormats =
         ((b'i' as u32) << 24) | ((b'f' as u32) << 16) | ((b'm' as u32) << 8) | (b'#' as u32),
@@ -398,7 +398,7 @@ impl audiodecoder::AudioDecoder for AudioDecoderImpl {
         let length = data.len();
         assert!(length <= (u32::MAX as usize));
         let data: Vec<u8> = data.iter().map(|x| *x).collect();
-        let result = match self.codec.append_input_data(data.as_slice(), &[
+        let result = match self.codec.append_input_data(&data, &[
             AudioStreamPacketDescription {
                 start_offset: 0,
                 variable_frames_in_packet: 0,
@@ -455,9 +455,8 @@ impl audiodecoder::DecodedAudioSamples for DecodedAudioSamplesImpl {
     fn samples<'a>(&'a self, channel: i32) -> Option<&'a [f32]> {
         let buffer = self.output_buffer_list.buffers()[channel as usize].data();
         unsafe {
-            Some(mem::transmute::<&[f32],
-                                  &'a [f32]>(slice::from_raw_buf(&(buffer.as_ptr() as *const f32),
-                                                                 buffer.len() / 4)))
+            Some(slice::from_raw_parts(buffer.as_ptr() as *const f32,
+                                       buffer.len() / 4))
         }
     }
 }

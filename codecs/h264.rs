@@ -26,13 +26,13 @@ pub fn create_avcc_chunk(headers: &VideoHeaders) -> Vec<u8> {
 
     for seq_header in seq_headers.iter() {
         avcc.push_all(&[ (seq_header.len() >> 8) as u8, seq_header.len() as u8 ]);
-        avcc.push_all(seq_header.as_slice());
+        avcc.push_all(seq_header);
     }
 
     avcc.push(pict_headers.len() as u8);
     for pict_header in pict_headers.iter() {
         avcc.push_all(&[ (pict_header.len() >> 8) as u8, pict_header.len() as u8 ]);
-        avcc.push_all(pict_header.as_slice());
+        avcc.push_all(pict_header);
     }
 
     avcc

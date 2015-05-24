@@ -37,7 +37,7 @@ pub trait DecodedAudioSamples {
 }
 
 /// For codecs that require no headers, or as a placeholder.
-#[derive(Copy)]
+#[derive(Copy, Clone)]
 pub struct EmptyAudioHeadersImpl;
 
 impl AudioHeaders for EmptyAudioHeadersImpl {

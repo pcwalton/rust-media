@@ -23,7 +23,6 @@ use libc::{self, c_double, c_int, c_long, c_uchar, c_uint, c_void, size_t};
 use std::cell::RefCell;
 use std::i32;
 use std::mem;
-use std::num::FromPrimitive;
 use std::io::{BufReader, BufWriter, Read, Write};
 use std::io::SeekFrom;
 use std::ptr;
@@ -418,7 +417,14 @@ pub struct GraphicsControlBlock {
 
 impl GraphicsControlBlock {
     pub fn disposal_mode(&self) -> DisposalMode {
-        FromPrimitive::from_i32(self.block.DisposalMode).unwrap()
+        // FIXME(Gankro): didn't want to pull in a whole crate/syntex for FromPrimitive
+        match self.block.DisposalMode {
+            0 => DisposalMode::Unspecified,
+            1 => DisposalMode::DoNot,
+            2 => DisposalMode::Background,
+            3 => DisposalMode::Previous,
+            _ => unreachable!(),
+        }
     }
 
     pub fn user_input_flag(&self) -> bool {
@@ -440,7 +446,7 @@ impl GraphicsControlBlock {
 }
 
 #[repr(i32)]
-#[derive(Copy, FromPrimitive)]
+#[derive(Copy, Clone)]
 pub enum DisposalMode {
     Unspecified = 0,
     DoNot = 1,
@@ -724,7 +730,7 @@ impl videodecoder::VideoDecoder for VideoDecoderImpl {
         };
         let mut palette = Vec::new();
         let mut color_bytes = [0, 0, 0];
-        for _ in range(0, palette_size) {
+        for _ in 0 .. palette_size {
             match reader.read(&mut color_bytes) {
                 Ok(3) => {
                     palette.push(RgbColor {
