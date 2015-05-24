@@ -11,7 +11,7 @@
 
 extern crate clock_ticks;
 extern crate libc;
-extern crate "rust-media" as media;
+extern crate rust_media as media;
 extern crate sdl2;
 
 #[macro_use]
