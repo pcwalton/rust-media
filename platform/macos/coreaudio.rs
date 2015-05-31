@@ -129,6 +129,7 @@ impl AudioBufferList {
 }
 
 #[repr(C)]
+#[unsafe_no_drop_flag]
 pub struct AudioBufferListRef {
     buffer_list: *mut AudioBufferList,
 }

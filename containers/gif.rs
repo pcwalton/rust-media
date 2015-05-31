@@ -32,6 +32,7 @@ use std::marker::PhantomData;
 use byteorder::{LittleEndian, WriteBytesExt, ReadBytesExt};
 
 #[repr(C)]
+#[unsafe_no_drop_flag]
 pub struct FileType {
     /// The underlying file.
     file: *mut ffi::GifFileType,
