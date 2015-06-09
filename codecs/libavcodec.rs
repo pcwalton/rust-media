@@ -108,11 +108,11 @@ impl AvCodecContext {
         unsafe {
             match self.context {
                 ffi::EitherAVCodecContext::V362300(context) => {
-                    (*context).extradata = extra_data.as_mut_slice().as_mut_ptr();
+                    (*context).extradata = extra_data.as_mut_ptr();
                     (*context).extradata_size = extra_data.len() as i32;
                 }
                 ffi::EitherAVCodecContext::V380D64(context) => {
-                    (*context).extradata = extra_data.as_mut_slice().as_mut_ptr();
+                    (*context).extradata = extra_data.as_mut_ptr();
                     (*context).extradata_size = extra_data.len() as i32;
                 }
             }
@@ -352,7 +352,7 @@ impl<'a> AvPacket<'a> {
         // Guard against segfaults per the documentation by setting the padding to zero.
         assert!(data.len() <= (i32::MAX as usize));
         assert!(data.len() >= FF_INPUT_BUFFER_PADDING_SIZE);
-        for i in range(data.len() - FF_INPUT_BUFFER_PADDING_SIZE, data.len()) {
+        for i in (data.len() - FF_INPUT_BUFFER_PADDING_SIZE) .. data.len() {
             data[i] = 0
         }
 
@@ -417,7 +417,7 @@ pub mod samples {
 
     use libc::c_int;
 
-    #[derive(Copy)]
+    #[derive(Copy, Clone)]
     pub struct BufferSizeResult {
         pub buffer_size: c_int,
         pub linesize: c_int,
@@ -475,11 +475,11 @@ impl videodecoder::VideoDecoder for VideoDecoderImpl {
     fn decode_frame(&self, data: &[u8], presentation_time: &Timestamp)
                     -> Result<Box<videodecoder::DecodedVideoFrame + 'static>,()> {
         let mut data: Vec<_> = data.iter().map(|x| *x).collect();
-        for _ in range(0, FF_INPUT_BUFFER_PADDING_SIZE) {
+        for _ in 0 .. FF_INPUT_BUFFER_PADDING_SIZE {
             data.push(0);
         }
 
-        let mut packet = AvPacket::new(data.as_mut_slice());
+        let mut packet = AvPacket::new(&mut data);
         let presentation_time = *presentation_time;
         self.context.borrow_mut().set_get_buffer_callback(Box::new(move |frame: &AvFrame| {
             frame.set_user_data(Box::new(presentation_time))
@@ -570,8 +570,8 @@ impl audiodecoder::AudioDecoderInfo for AudioDecoderInfoImpl {
         let codec = AvCodec::find_decoder(AV_CODEC_ID_AAC).unwrap();
         let context = AvCodecContext::new(&codec);
         let mut options = AvDictionary::new();
-        options.set("ac", self.channels.to_string().as_slice());
-        options.set("ar", self.sample_rate.to_string().as_slice());
+        options.set("ac", &self.channels.to_string());
+        options.set("ar", &self.sample_rate.to_string());
         options.set("request_sample_fmt", "fltp");
 
         let (result, _) = context.open(&codec, options);
@@ -592,10 +592,10 @@ impl audiodecoder::AudioDecoder for AudioDecoderImpl {
     fn decode(&mut self, data: &[u8]) -> Result<(),()> {
         let data_len = data.len();
         let mut data: Vec<_> = data.iter().map(|x| *x).collect();
-        for _ in range(0, FF_INPUT_BUFFER_PADDING_SIZE) {
+        for _ in 0 .. FF_INPUT_BUFFER_PADDING_SIZE {
             data.push(0);
         }
-        let mut packet = AvPacket::new(data.as_mut_slice());
+        let mut packet = AvPacket::new(&mut data);
         let frame = AvFrame::new();
         let result = self.context.decode_audio(&frame, &mut packet);
         match result {
@@ -1072,7 +1072,7 @@ pub mod ffi {
     }
 
     #[repr(C)]
-    #[derive(Copy, Debug)]
+    #[derive(Copy, Clone, Debug)]
     pub struct AVRational {
         pub num: c_int,
         pub den: c_int,

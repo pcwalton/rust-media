@@ -7,11 +7,11 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#![feature(collections, core, old_io, libc, rustc_private, std_misc)]
+#![feature(collections, libc, rustc_private, thread_sleep, duration)]
 
 extern crate clock_ticks;
 extern crate libc;
-extern crate "rust-media" as media;
+extern crate rust_media as media;
 extern crate sdl2;
 
 #[macro_use]
@@ -27,17 +27,17 @@ use sdl2::event::{Event, WindowEventId};
 use sdl2::keycode::KeyCode;
 use sdl2::pixels::PixelFormatEnum;
 use sdl2::rect::Rect;
-use sdl2::render::{ACCELERATED, PRESENTVSYNC, RenderDriverIndex, Renderer, RendererParent};
+use sdl2::render::{Renderer, RendererParent};
 use sdl2::render::{Texture, TextureAccess};
-use sdl2::video::{OPENGL, RESIZABLE, Window, WindowPos};
-use sdl2::{INIT_AUDIO, INIT_VIDEO, init};
+use sdl2::video::{Window, WindowBuilder};
+use sdl2::init;
 use std::cmp;
 use std::env;
 use std::mem;
 use std::fs::File;
-use std::old_io::timer;
+use std::thread;
 use std::slice;
-use std::time::duration::Duration;
+use std::time::Duration;
 
 struct ExampleMediaPlayer {
     /// A reference timestamp at which playback began.
@@ -92,29 +92,34 @@ impl ExampleMediaPlayer {
 
 struct ExampleVideoRenderer<'a> {
     /// The SDL renderer.
-    renderer: &'a Renderer,
+    renderer: Renderer<'a>,
     /// The YUV texture we're using.
-    texture: Texture<'a>,
+    texture: Texture,
 }
 
 impl<'a> ExampleVideoRenderer<'a> {
-    fn new<'b>(renderer: &'b Renderer, video_format: SdlVideoFormat, video_height: i32)
+    fn new<'b>(renderer: Renderer<'b>, video_format: SdlVideoFormat, video_height: i32)
                -> ExampleVideoRenderer<'b> {
-        ExampleVideoRenderer {
-            renderer: renderer,
-            texture: renderer.create_texture(video_format.sdl_pixel_format,
+        let texture = renderer.create_texture(video_format.sdl_pixel_format,
                                              TextureAccess::Streaming,
                                              (video_format.sdl_width as i32,
                                               video_height))
-                        .ok().expect("Could not create rendered texture"),
+                        .ok().expect("Could not create rendered texture");
+        ExampleVideoRenderer {
+            texture: texture,
+            renderer: renderer,
         }
     }
 
-    fn present(&mut self, image: Box<DecodedVideoFrame + 'static>, player: &mut Player) {
+    fn present(&mut self, 
+                image: Box<DecodedVideoFrame + 'static>, 
+                player: &mut Player, 
+                sdl_context: &sdl2::Sdl) {
+
         let video_track = player.video_track().unwrap();
 
         let rect = if let &RendererParent::Window(ref window) = self.renderer.get_parent() {
-            let (width, height) = window.get_size();
+            let (width, height) = window.properties_getters(&sdl_context.event_pump()).get_size();
             Rect::new(0, 0, width, height)
         } else {
             panic!("Renderer parent wasn't a window!")
@@ -186,6 +191,7 @@ impl SdlVideoFormat {
 
 pub struct ExampleAudioRenderer {
     samples: Vec<f32>,
+    channels: u8,
 }
 
 impl AudioCallback for ExampleAudioRenderer {
@@ -215,29 +221,30 @@ impl AudioCallback for ExampleAudioRenderer {
 impl ExampleAudioRenderer {
     pub fn new(sample_rate: f64, channels: u16) -> AudioDevice<ExampleAudioRenderer> {
         let desired_spec = AudioSpecDesired {
-            freq: sample_rate as i32,
-            channels: cmp::min(channels, 2) as u8,
-            samples: 0,
-            callback: ExampleAudioRenderer {
-                samples: Vec::new(),
-            },
+            freq: Some(sample_rate as i32),
+            channels: Some(cmp::min(channels, 2) as u8),
+            samples: None,
         };
-        desired_spec.open_audio_device(None, false).unwrap()
+        AudioDevice::open_playback(None, desired_spec, |spec| {
+            ExampleAudioRenderer {
+                samples: Vec::new(),
+                channels: spec.channels,
+            }
+        }).unwrap()
     }
 }
 
 fn enqueue_audio_samples(device: &mut AudioDevice<ExampleAudioRenderer>,
                          input_samples: &[Vec<f32>]) {
     // Gather up all the channels so we can perform audio format conversion.
-    let channels = device.get_spec().channels;
     let input_samples: Vec<_> = input_samples.iter()
                                              .take(2)
                                              .map(|samples| &samples[..])
                                              .collect();
 
     // Make room for the samples in the output buffer.
-    let output_channels = cmp::min(channels, 2);
     let mut output = device.lock();
+    let output_channels = output.channels;
     let output_index = output.samples.len();
     let input_sample_count = input_samples[0].len();
     let output_length = input_sample_count * output_channels as usize;
@@ -260,7 +267,7 @@ fn upload_image(video_track: &VideoTrack,
     // Gather up all the input pixels and strides so we can do pixel format conversion.
     let lock = image.lock();
     let (mut input_pixels, mut input_strides) = (Vec::new(), Vec::new());
-    for plane in range(0, pixel_format.planes()) {
+    for plane in 0 .. pixel_format.planes() {
         input_pixels.push(lock.pixels(plane));
         input_strides.push(image.stride(plane) as usize);
     }
@@ -298,7 +305,7 @@ fn main() {
         return
     }
 
-    let mut sdl_context = sdl2::init(INIT_VIDEO | INIT_AUDIO).ok().expect("Could not start SDL");
+    let mut sdl_context = sdl2::init().video().audio().build().ok().expect("Could not start SDL");
     let file = Box::new(File::open(&args[1])
                         .ok().expect("Could not open media file"));
 
@@ -306,18 +313,23 @@ fn main() {
     let mut media_player = ExampleMediaPlayer::new();
 
     let renderer = player.video_track().map(|video_track| {
-        let window = Window::new("rust-media example",
-                                 WindowPos::PosCentered,
-                                 WindowPos::PosCentered,
-                                 video_track.width() as i32,
-                                 video_track.height() as i32,
-                                 OPENGL | RESIZABLE).ok().expect("Could not create window");
-        Renderer::from_window(window, RenderDriverIndex::Auto, ACCELERATED | PRESENTVSYNC)
-            .ok().expect("could not render window")
+        let window = WindowBuilder::new(&sdl_context,
+                                "rust-media example",
+                                 video_track.width() as u32,
+                                 video_track.height() as u32)
+                                .position_centered()
+                                .opengl()
+                                .resizable()
+                                .build()
+                                .ok().expect("Could not create window");
+        window.renderer()
+              .present_vsync()
+              .build()
+              .ok().expect("could not render window")
     });
     let mut video_renderer = player.video_track().map(|video_track| {
         let video_format = SdlVideoFormat::from_video_track(&*video_track);
-        ExampleVideoRenderer::new(renderer.as_ref().expect("Could not get renderer"),
+        ExampleVideoRenderer::new(renderer.expect("Could not get renderer"),
                                   video_format,
                                   video_track.height() as i32)
     });
@@ -336,9 +348,13 @@ fn main() {
 
         let target_time_since_playback_start = (player.next_frame_presentation_time().unwrap() -
                                                 media_player.playback_start_ticks).duration();
-        let target_time = Duration::nanoseconds(media_player.playback_start_wallclock_time as i64)
+        let target_time = duration_from_nanos(media_player.playback_start_wallclock_time)
             + target_time_since_playback_start;
-        timer::sleep(target_time - Duration::nanoseconds(clock_ticks::precise_time_ns() as i64));
+        let cur_time = duration_from_nanos(clock_ticks::precise_time_ns());
+        
+        if cur_time < target_time {
+            thread::sleep(target_time - cur_time);
+        }
 
         let frame = match player.advance() {
             Ok(frame) => frame,
@@ -346,7 +362,7 @@ fn main() {
         };
 
         if let Some(ref mut video_renderer) = video_renderer {
-            video_renderer.present(frame.video_frame.unwrap(), &mut player);
+            video_renderer.present(frame.video_frame.unwrap(), &mut player, &sdl_context);
         }
         if let Some(ref mut audio_renderer) = audio_renderer {
             enqueue_audio_samples(audio_renderer, &frame.audio_samples.unwrap());
@@ -358,3 +374,10 @@ fn main() {
     }
 }
 
+
+fn duration_from_nanos(nanos: u64) -> Duration {
+    let secs = nanos / 1_000_000_000;
+    let rounded_nanos = secs * 1_000_000_000;
+    let extra_nanos = nanos - rounded_nanos;
+    Duration::new(secs, extra_nanos as u32)
+}

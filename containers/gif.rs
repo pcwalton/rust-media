@@ -23,7 +23,6 @@ use libc::{self, c_double, c_int, c_long, c_uchar, c_uint, c_void, size_t};
 use std::cell::RefCell;
 use std::i32;
 use std::mem;
-use std::num::FromPrimitive;
 use std::io::{BufReader, BufWriter, Read, Write};
 use std::io::SeekFrom;
 use std::ptr;
@@ -33,6 +32,7 @@ use std::marker::PhantomData;
 use byteorder::{LittleEndian, WriteBytesExt, ReadBytesExt};
 
 #[repr(C)]
+#[unsafe_no_drop_flag]
 pub struct FileType {
     /// The underlying file.
     file: *mut ffi::GifFileType,
@@ -49,10 +49,10 @@ impl Drop for FileType {
 }
 
 impl FileType {
-    pub fn new(reader: Box<StreamReader>) -> Result<FileType,c_int> {
+    pub fn new(reader: Box<StreamReader>) -> Result<FileType, c_int> {
         let mut error = 0;
         let file = unsafe {
-            ffi::DGifOpen(mem::transmute::<Box<Box<_>>,*mut c_void>(Box::new(reader)),
+            ffi::DGifOpen(mem::transmute::<Box<Box<_>>, *mut c_void>(Box::new(reader)),
                           read_func,
                           &mut error)
         };
@@ -417,10 +417,19 @@ pub struct GraphicsControlBlock {
 }
 
 impl GraphicsControlBlock {
+    /// Particular way to initialize the pixels of the frame
     pub fn disposal_mode(&self) -> DisposalMode {
-        FromPrimitive::from_i32(self.block.DisposalMode).unwrap()
+        // FIXME(Gankro): didn't want to pull in a whole crate/syntex for FromPrimitive
+        match self.block.DisposalMode {
+            ffi::DISPOSAL_UNSPECIFIED => DisposalMode::Unspecified,
+            ffi::DISPOSE_DO_NOT => DisposalMode::DoNot,
+            ffi::DISPOSE_BACKGROUND => DisposalMode::Background,
+            ffi::DISPOSE_PREVIOUS => DisposalMode::Previous,
+            _ => unreachable!(),
+        }
     }
 
+    /// archaic; specifies that the gif should wait for user input before proceeding.
     pub fn user_input_flag(&self) -> bool {
         self.block.UserInputFlag
     }
@@ -429,6 +438,8 @@ impl GraphicsControlBlock {
         self.block.DelayTime
     }
 
+    /// Which colour index to interpret as a transparent pixel.
+    /// Note: this still overwrites a non-trasparent pixel.
     pub fn transparent_color(&self) -> Option<c_int> {
         let color = self.block.TransparentColor;
         if color >= 0 {
@@ -440,12 +451,17 @@ impl GraphicsControlBlock {
 }
 
 #[repr(i32)]
-#[derive(Copy, FromPrimitive)]
+#[derive(Copy, Clone)]
+/// Specifies what state to initialize the frame's pixels in
 pub enum DisposalMode {
-    Unspecified = 0,
-    DoNot = 1,
-    Background = 2,
-    Previous = 3,
+    // Treat this like Background, I guess
+    Unspecified = ffi::DISPOSAL_UNSPECIFIED,
+    // Use the previous frame as the starting point
+    DoNot = ffi::DISPOSE_DO_NOT,
+    // Blank the frame to the background colour
+    Background = ffi::DISPOSE_BACKGROUND,
+    // Use the previous-previous frame as the starting point (archaic?)
+    Previous = ffi::DISPOSE_PREVIOUS,
 }
 
 // Implementation of the abstract `ContainerReader` interface
@@ -724,7 +740,7 @@ impl videodecoder::VideoDecoder for VideoDecoderImpl {
         };
         let mut palette = Vec::new();
         let mut color_bytes = [0, 0, 0];
-        for _ in range(0, palette_size) {
+        for _ in 0 .. palette_size {
             match reader.read(&mut color_bytes) {
                 Ok(3) => {
                     palette.push(RgbColor {
@@ -824,7 +840,7 @@ pub mod ffi {
     pub const DISPOSAL_UNSPECIFIED: c_int = 0;
     pub const DISPOSE_DO_NOT: c_int = 1;
     pub const DISPOSE_BACKGROUND: c_int = 2;
-    pub const DISPOSE_PREVIOUS: c_int = -3;
+    pub const DISPOSE_PREVIOUS: c_int = 3;
 
     pub const NO_TRANSPARENT_COLOR: c_int = -1;
 

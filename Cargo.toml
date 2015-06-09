@@ -8,37 +8,38 @@ build = "build.rs"
 
 [lib]
 
-name = "rust-media"
+name = "rust_media"
 path = "lib.rs"
 
 [dependencies.libvpx-sys]
 
-git = "https://github.com/pcwalton/libvpx"
-branch = "servo"
+git = "https://github.com/Gankro/libvpx"
+branch = "patch-1"
 
 [dependencies.libwebm-sys]
 
-git = "https://github.com/pcwalton/libwebm"
-branch = "servo"
+git = "https://github.com/Gankro/libwebm"
+branch = "patch-1"
 
 [dependencies.mp4v2-sys]
 
-git = "https://github.com/pcwalton/mp4v2"
-branch = "servo"
+git = "https://github.com/Gankro/mp4v2"
+branch = "patch-1"
 
 [dependencies.ogg-sys]
 
-git = "https://github.com/pcwalton/ogg"
-branch = "servo"
+git = "https://github.com/Gankro/ogg"
+branch = "patch-1"
 
 [dependencies.vorbis-sys]
 
-git = "https://github.com/pcwalton/vorbis"
-branch = "servo"
+git = "https://github.com/Gankro/vorbis"
+branch = "patch-3"
 
 [dependencies.giflib-sys]
 
-git = "https://github.com/pcwalton/giflib"
+git = "https://github.com/Gankro/giflib"
+branch = "patch-1"
 
 [dependencies]
 byteorder = "0.3.0"
@@ -46,7 +47,7 @@ byteorder = "0.3.0"
 [target.x86_64-apple-darwin.dependencies.core_foundation]
 
 git = "https://github.com/servo/rust-core-foundation"
-rev = "da9a52655fce4727dcf261d6ed9a49eeddc7b131"
+rev = "928efbae42fc596e6ede2cf0949c3d6d6f3dad8f"
 
 [features]
 

@@ -636,7 +636,7 @@ impl<'a> container::Frame for FrameImpl<'a> {
     }
 
     fn read(&self, buffer: &mut [u8]) -> Result<(),()> {
-        bytes::copy_memory(buffer, self.sample.bytes);
+        bytes::copy_memory(self.sample.bytes, buffer);
         Ok(())
     }
 

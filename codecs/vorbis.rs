@@ -88,7 +88,6 @@ pub struct VorbisDspState {
     info: VorbisInfo,
 }
 
-#[unsafe_destructor]
 impl Drop for VorbisDspState {
     fn drop(&mut self) {
         unsafe {
@@ -148,7 +147,6 @@ pub struct VorbisBlock<'a> {
     state: &'a mut VorbisDspState,
 }
 
-#[unsafe_destructor]
 impl<'a> Drop for VorbisBlock<'a> {
     fn drop(&mut self) {
         unsafe {
@@ -231,13 +229,13 @@ pub struct VorbisHeaders {
 
 impl VorbisHeaders {
     pub fn id<'a>(&'a self) -> &'a [u8] {
-        &self.data.as_slice()[0..self.id_size]
+        &self.data[0..self.id_size]
     }
     pub fn comment<'a>(&'a self) -> &'a [u8] {
-        &self.data.as_slice()[self.id_size..self.id_size + self.comment_size]
+        &self.data[self.id_size..self.id_size + self.comment_size]
     }
     pub fn setup<'a>(&'a self) -> &'a [u8] {
-        &self.data.as_slice()[self.id_size + self.comment_size..]
+        &self.data[self.id_size + self.comment_size..]
     }
 }
 

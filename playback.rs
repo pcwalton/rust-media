@@ -17,7 +17,6 @@ use videodecoder::{DecodedVideoFrame, RegisteredVideoDecoder, VideoDecoder};
 use libc::{c_int, c_long};
 use std::iter;
 use std::mem;
-use std::num::SignedInt;
 use std::marker::PhantomData;
 
 /// A simple video/audio player.
@@ -42,9 +41,9 @@ pub struct Player<'a> {
 
 impl<'a> Player<'a> {
     pub fn new<'b>(reader: Box<StreamReader>, mime_type: &str) -> Player<'b> {
-        let mut reader = RegisteredContainerReader::get(mime_type.as_slice()).unwrap()
-                                                                             .new(reader)
-                                                                             .unwrap();
+        let mut reader = RegisteredContainerReader::get(mime_type).unwrap()
+                                                                  .new(reader)
+                                                                  .unwrap();
 
         let (video_player_info, audio_player_info) = {
             let (video_codec, audio_codec) =
@@ -209,7 +208,7 @@ impl<'a> Player<'a> {
                     };
                     decode_audio_frame(&mut *audio.codec,
                                        &*frame,
-                                       audio.samples.as_mut().unwrap().as_mut_slice());
+                                       &mut audio.samples.as_mut().unwrap());
                     audio.frame_index += 1;
 
                     // If there is a video track, we synchronize to it. Otherwise, read just one
@@ -365,24 +364,24 @@ fn decode_video_frame(codec: &mut VideoDecoder,
                       frames: &mut Vec<Box<DecodedVideoFrame + 'static>>) {
     let mut data = Vec::new();
     data.resize(frame.len() as usize, 0u8);
-    frame.read(data.as_mut_slice()).unwrap();
+    frame.read(&mut data).unwrap();
 
     let frame_presentation_time = frame.time() + frame.rendering_offset();
-    if let Ok(image) = codec.decode_frame(data.as_mut_slice(), &frame_presentation_time) {
+    if let Ok(image) = codec.decode_frame(&mut data, &frame_presentation_time) {
         frames.push(image)
     }
 }
 
 fn decode_audio_frame(codec: &mut AudioDecoder, frame: &Frame, samples: &mut [Vec<f32>]) {
     let mut data: Vec<u8> = iter::repeat(0).take(frame.len() as usize).collect();
-    frame.read(data.as_mut_slice()).unwrap();
-    if codec.decode(data.as_slice()).is_err() {
+    frame.read(&mut data).unwrap();
+    if codec.decode(&data).is_err() {
         return
     }
 
     let sample_count = match codec.decoded_samples() {
         Ok(pcm_output) => {
-            for channel in range(0, samples.len() as i32) {
+            for channel in 0 .. samples.len() as i32 {
                 samples[channel as usize].push_all(pcm_output.samples(channel).unwrap())
             }
             pcm_output.samples(0).unwrap().len()

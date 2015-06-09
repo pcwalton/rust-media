@@ -14,16 +14,16 @@ use std::io::{BufWriter, Write};
 use std::slice::bytes;
 
 /// 8-bit Y plane followed by 8-bit 2x2-subsampled U and V planes.
-#[derive(Copy, Debug)]
+#[derive(Copy, Clone, Debug)]
 pub struct I420;
 
 /// 8-bit Y plane followed by an interleaved U/V plane containing 2x2 subsampled color difference
 /// samples.
-#[derive(Copy, Debug)]
+#[derive(Copy, Clone, Debug)]
 pub struct NV12;
 
 /// 8-bit indexes into a 24-bit color palette.
-#[derive(Copy, Debug)]
+#[derive(Copy, Clone, Debug)]
 pub struct Palette<'a> {
     pub palette: &'a [RgbColor],
 }
@@ -37,7 +37,7 @@ impl<'a> Palette<'a> {
 }
 
 /// 24-bit RGB.
-#[derive(Copy, Debug)]
+#[derive(Copy, Clone, Debug)]
 pub struct Rgb24;
 
 #[derive(Copy, Clone)]
@@ -77,7 +77,7 @@ impl ConvertPixelFormat<I420> for I420 {
                _: usize,
                height: usize)
                -> Result<(),()> {
-        for plane in range(0, 3) {
+        for plane in 0 .. 3 {
             let (y_input_pixels, y_input_stride) = (input_pixels[plane], input_strides[plane]);
             let y_output_pixels = &mut *output_pixels[plane];
             let y_output_stride = output_strides[plane];
@@ -90,11 +90,11 @@ impl ConvertPixelFormat<I420> for I420 {
             };
 
             let (mut input_index, mut output_index) = (0, 0);
-            for _ in range(0, effective_height) {
+            for _ in 0 .. effective_height {
                 let input_row = &y_input_pixels[input_index..input_index + minimum_stride];
                 let mut output_row =
                     &mut y_output_pixels[output_index..output_index + minimum_stride];
-                bytes::copy_memory(output_row, input_row);
+                bytes::copy_memory(input_row, output_row);
                 input_index += y_input_stride;
                 output_index += y_output_stride;
             }
@@ -116,10 +116,10 @@ impl ConvertPixelFormat<I420> for NV12 {
         // Copy over the Y plane.
         let (y_input_pixels, y_input_stride) = (input_pixels[0], input_strides[0]);
         let (mut input_index, mut output_index) = (0, 0);
-        for _ in range(0, height) {
+        for _ in 0 .. height {
             let input_row = &y_input_pixels[input_index..input_index + width];
             let mut output_row = &mut output_pixels[0][output_index..output_index + width];
-            bytes::copy_memory(output_row, input_row);
+            bytes::copy_memory(input_row, output_row);
             input_index += y_input_stride;
             output_index += output_strides[0];
         }
@@ -134,7 +134,7 @@ impl ConvertPixelFormat<I420> for NV12 {
         let effective_height = height / 2;
 
         let (mut input_index, mut output_u_index, mut output_v_index) = (0, 0, 0);
-        for _ in range(0, effective_height) {
+        for _ in 0 .. effective_height {
             let input_row = &y_input_pixels[input_index..input_index + y_input_stride];
             let output_u_row =
                 &mut y_output_u_pixels[output_u_index..output_u_index + width / 2];
@@ -143,7 +143,7 @@ impl ConvertPixelFormat<I420> for NV12 {
 
             let mut u_writer = BufWriter::new(output_u_row);
             let mut v_writer = BufWriter::new(output_v_row);
-            for x in range(0, width / 2) {
+            for x in 0 .. width / 2 {
                 drop(u_writer.write_all(&[input_row[x * 2]]));
                 drop(v_writer.write_all(&[input_row[x * 2 + 1]]));
             }
@@ -170,12 +170,12 @@ impl ConvertPixelFormat<Rgb24> for I420 {
         // FIXME(pcwalton): This does not convert the chroma yet. Dorothy has not yet left Kansas.
         let (y_input_pixels, y_input_stride) = (input_pixels[0], input_strides[0]);
         let (mut input_index, mut output_index) = (0, 0);
-        for _ in range(0, height) {
+        for _ in 0 .. height {
             let input_row = &y_input_pixels[input_index..input_index + width * 3];
             let output_row =
                 &mut output_pixels[0][output_index..output_index + output_strides[0]];
             let mut writer = BufWriter::new(output_row);
-            for x in range(0, width) {
+            for x in 0 .. width {
                 drop(writer.write_all(&[input_row[x], input_row[x], input_row[x]]));
             }
             input_index += y_input_stride;
@@ -197,11 +197,11 @@ impl<'a> ConvertPixelFormat<Rgb24> for Palette<'a> {
                -> Result<(),()> {
         let (y_input_pixels, y_input_stride) = (input_pixels[0], input_strides[0]);
         let (mut input_index, mut output_index) = (0, 0);
-        for _ in range(0, height) {
+        for _ in 0 .. height {
             let input_row = &y_input_pixels[input_index..input_index + width];
             let output_row = &mut output_pixels[0][output_index..output_index + width * 3];
             let mut writer = BufWriter::new(output_row);
-            for x in range(0, width) {
+            for x in 0 .. width {
                 let color = self.palette[input_row[x] as usize];
                 drop(writer.write_all(&[color.r, color.g, color.b]));
             }
@@ -224,10 +224,10 @@ impl ConvertPixelFormat<Rgb24> for Rgb24 {
                -> Result<(),()> {
         let (y_input_pixels, y_input_stride) = (input_pixels[0], input_strides[0]);
         let (mut input_index, mut output_index) = (0, 0);
-        for _ in range(0, height) {
+        for _ in 0 .. height {
             let input_row = &y_input_pixels[input_index..input_index + width * 3];
             let mut output_row = &mut output_pixels[0][output_index..output_index + width * 3];
-            bytes::copy_memory(output_row, input_row);
+            bytes::copy_memory(input_row, output_row);
             input_index += y_input_stride;
             output_index += output_strides[0];
         }
@@ -262,7 +262,7 @@ impl ConvertColorFormat<RgbColor> for YuvColor {
 /// Generic pixel format conversion with the pixel formats determined at runtime.
 ///
 /// We follow the same nomenclature as the document here: http://www.fourcc.org/yuv.php
-#[derive(Copy, Debug)]
+#[derive(Copy, Clone, Debug)]
 pub enum PixelFormat<'a> {
     I420,
     NV12,

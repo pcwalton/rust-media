@@ -24,7 +24,7 @@ pub trait ConvertAudioFormat<To:AudioFormat> : AudioFormat {
 }
 
 /// Planar 32-bit floating point.
-#[derive(Copy)]
+#[derive(Copy, Clone)]
 pub struct Float32Planar;
 
 impl AudioFormat for Float32Planar {
@@ -32,7 +32,7 @@ impl AudioFormat for Float32Planar {
 }
 
 /// Interleaved (non-planar) 32-bit floating point.
-#[derive(Copy)]
+#[derive(Copy, Clone)]
 pub struct Float32Interleaved;
 
 impl AudioFormat for Float32Interleaved {
@@ -52,8 +52,8 @@ impl ConvertAudioFormat<Float32Interleaved> for Float32Planar {
         debug_assert!(input_samples.iter().all(|samples| input_samples[0].len() == samples.len()));
 
         let mut output_index = 0;
-        for sample in range(0, input_samples[0].len()) {
-            for channel in range(0, channels) {
+        for sample in 0 .. input_samples[0].len() {
+            for channel in 0 .. channels {
                 output_samples[0][output_index] = input_samples[channel][sample];
                 output_index += 1;
             }
