@@ -40,6 +40,10 @@ impl<'a> Palette<'a> {
 #[derive(Copy, Clone, Debug)]
 pub struct Rgb24;
 
+/// 32-bit RGBA.
+#[derive(Copy, Clone, Debug)]
+pub struct Rgba32;
+
 #[derive(Copy, Clone)]
 pub struct YuvColor {
     pub y: f64,
@@ -52,6 +56,14 @@ pub struct RgbColor {
     pub r: u8,
     pub g: u8,
     pub b: u8,
+}
+
+#[derive(Copy, Clone, Debug)]
+pub struct RgbaColor {
+    pub r: u8,
+    pub g: u8,
+    pub b: u8,
+    pub a: u8,
 }
 
 /// Converts between pixel formats on the CPU.
@@ -235,6 +247,85 @@ impl ConvertPixelFormat<Rgb24> for Rgb24 {
     }
 }
 
+impl ConvertPixelFormat<Rgb24> for Rgba32 {
+    fn convert(&self,
+               _: &Rgb24,
+               output_pixels: &mut [&mut [u8]],
+               output_strides: &[usize],
+               input_pixels: &[&[u8]],
+               input_strides: &[usize],
+               width: usize,
+               height: usize)
+               -> Result<(),()> {
+        let (y_input_pixels, y_input_stride) = (input_pixels[0], input_strides[0]);
+        let (mut input_index, mut output_index) = (0, 0);
+        for _ in 0 .. height {
+            let input_row = &y_input_pixels[input_index .. input_index + width * 4];
+            let mut output_row = &mut output_pixels[0][output_index .. output_index + width * 3];
+            for i in 0 .. width {
+                output_row[i * 3 + 0] = input_row[i * 4 + 0];
+                output_row[i * 3 + 1] = input_row[i * 4 + 1];
+                output_row[i * 3 + 2] = input_row[i * 4 + 2];
+            }
+            input_index += y_input_stride;
+            output_index += output_strides[0];
+        }
+        Ok(())
+    }
+}
+
+impl ConvertPixelFormat<Rgba32> for Rgb24 {
+    fn convert(&self,
+               _: &Rgba32,
+               output_pixels: &mut [&mut [u8]],
+               output_strides: &[usize],
+               input_pixels: &[&[u8]],
+               input_strides: &[usize],
+               width: usize,
+               height: usize)
+               -> Result<(),()> {
+        let (y_input_pixels, y_input_stride) = (input_pixels[0], input_strides[0]);
+        let (mut input_index, mut output_index) = (0, 0);
+        for _ in 0 .. height {
+            let input_row = &y_input_pixels[input_index .. input_index + width * 3];
+            let mut output_row = &mut output_pixels[0][output_index .. output_index + width * 4];
+            for i in 0 .. width {
+                output_row[i * 4 + 0] = input_row[i * 3 + 0];
+                output_row[i * 4 + 1] = input_row[i * 3 + 1];
+                output_row[i * 4 + 2] = input_row[i * 3 + 2];
+                output_row[i * 4 + 3] = 0xFF;
+            }
+            input_index += y_input_stride;
+            output_index += output_strides[0];
+        }
+        Ok(())
+    }
+}
+
+impl ConvertPixelFormat<Rgba32> for Rgba32 {
+    fn convert(&self,
+               _: &Rgba32,
+               output_pixels: &mut [&mut [u8]],
+               output_strides: &[usize],
+               input_pixels: &[&[u8]],
+               input_strides: &[usize],
+               width: usize,
+               height: usize)
+               -> Result<(),()> {
+        let (y_input_pixels, y_input_stride) = (input_pixels[0], input_strides[0]);
+        let (mut input_index, mut output_index) = (0, 0);
+        for _ in 0 .. height {
+            let input_row = &y_input_pixels[input_index..input_index + width * 4];
+            let mut output_row = &mut output_pixels[0][output_index..output_index + width * 4];
+            bytes::copy_memory(input_row, output_row);
+            input_index += y_input_stride;
+            output_index += output_strides[0];
+        }
+        Ok(())
+    }
+}
+
+
 /// Converts between color formats on the CPU.
 pub trait ConvertColorFormat<To> {
     fn convert(&self) -> To;
@@ -268,6 +359,7 @@ pub enum PixelFormat<'a> {
     NV12,
     Indexed(Palette<'a>),
     Rgb24,
+    Rgba32,
 }
 
 impl<'a> ConvertPixelFormat<PixelFormat<'a>> for PixelFormat<'a> {
@@ -326,6 +418,33 @@ impl<'a> ConvertPixelFormat<PixelFormat<'a>> for PixelFormat<'a> {
                               width,
                               height)
             }
+            (PixelFormat::Rgb24, PixelFormat::Rgba32) => {
+                Rgb24.convert(&Rgba32,
+                              output_pixels,
+                              output_strides,
+                              input_pixels,
+                              input_strides,
+                              width,
+                              height)
+            }
+            (PixelFormat::Rgba32, PixelFormat::Rgb24) => {
+                Rgba32.convert(&Rgb24,
+                              output_pixels,
+                              output_strides,
+                              input_pixels,
+                              input_strides,
+                              width,
+                              height)
+            }
+            (PixelFormat::Rgba32, PixelFormat::Rgba32) => {
+                Rgba32.convert(&Rgba32,
+                              output_pixels,
+                              output_strides,
+                              input_pixels,
+                              input_strides,
+                              width,
+                              height)
+            }
             (_, _) => Err(()),
         }
     }
@@ -337,7 +456,9 @@ impl<'a> PixelFormat<'a> {
         match *self {
             PixelFormat::I420 => 3,
             PixelFormat::NV12 => 2,
-            PixelFormat::Indexed(_) | PixelFormat::Rgb24 => 1,
+            PixelFormat::Indexed(_)
+            | PixelFormat::Rgb24
+            | PixelFormat::Rgba32 => 1,
         }
     }
 }
