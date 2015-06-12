@@ -4,7 +4,7 @@
 
 `rust-media` is a media player framework for Rust, similar in spirit to `libvlc` or GStreamer. It's designed for use in Servo but is intended to be widely useful for all sorts of projects. Possible use cases are background music and FMVs for video games, as well as media player applications.
 
-`rust-media` is currently pinned to the same version of Rust that Servo uses. This means that, until the language is stable, you may have to forward-port it somewhat.
+The `master` branch of `rust-media` is currently pinned to the same version of Rust that Servo uses. The `nightly` branch is intended to track the current Rust nightly; however, like many Rust projects, it may be out of date.
 
 The library is currently in very early stages; contributions are welcome!
 
