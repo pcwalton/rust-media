@@ -487,43 +487,12 @@ impl container::ContainerReader for ContainerReaderImpl {
         1
     }
     fn track_by_index<'a>(&'a self, _: u16) -> Box<container::Track + 'a> {
-        Box::new(TrackImpl {
+        Box::new(VideoTrackImpl {
             file: &self.file,
-        }) as Box<container::Track + 'a>
+        })
     }
     fn track_by_number<'a>(&'a self, _: c_long) -> Box<container::Track + 'a> {
         self.track_by_index(0)
-    }
-}
-
-struct TrackImpl<'a> {
-    file: &'a RefCell<FileType>,
-}
-
-impl<'a> container::Track<'a> for TrackImpl<'a> {
-    fn track_type(self: Box<Self>) -> container::TrackType<'a> {
-        container::TrackType::Video(Box::new(VideoTrackImpl {
-            file: self.file,
-        }) as Box<container::VideoTrack<'a> + 'a>)
-    }
-
-    fn is_video(&self) -> bool { true }
-    fn is_audio(&self) -> bool { false }
-
-    fn cluster_count(&self) -> Option<c_int> {
-        None
-    }
-
-    fn number(&self) -> c_long {
-        0
-    }
-
-    fn codec(&self) -> Option<Vec<u8>> {
-        Some(vec![b'G', b'I', b'F', b'f'])
-    }
-
-    fn cluster<'b>(&'b self, cluster_index: i32) -> Result<Box<container::Cluster + 'b>,()> {
-        get_cluster(self.file, cluster_index)
     }
 }
 
@@ -533,24 +502,13 @@ struct VideoTrackImpl<'a> {
 
 impl<'a> container::Track<'a> for VideoTrackImpl<'a> {
     fn track_type(self: Box<Self>) -> container::TrackType<'a> {
-        container::TrackType::Video(Box::new(VideoTrackImpl {
-            file: self.file,
-        }) as Box<container::VideoTrack<'a> + 'a>)
+        container::TrackType::Video(self)
     }
 
     fn is_video(&self) -> bool { true }
-    fn is_audio(&self) -> bool { false }
-
-    fn cluster_count(&self) -> Option<c_int> {
-        None
-    }
-
-    fn number(&self) -> c_long {
-        0
-    }
 
     fn codec(&self) -> Option<Vec<u8>> {
-        Some(vec![b'G', b'I', b'F', b'f'])
+        Some(b"GIFf".to_vec())
     }
 
     fn cluster<'b>(&'b self, cluster_index: i32) -> Result<Box<container::Cluster + 'b>,()> {

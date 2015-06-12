@@ -62,15 +62,15 @@ pub trait ContainerReader {
 
 pub trait Track<'x> {
     fn track_type(self: Box<Self>) -> TrackType<'x>;
-    fn is_video(&self) -> bool;
-    fn is_audio(&self) -> bool;
+    fn is_video(&self) -> bool { false }
+    fn is_audio(&self) -> bool { false }
 
     /// Returns the number of clusters in this track, if possible. Returns `None` if this container
     /// has no table of contents (so the number of clusters is unknown).
-    fn cluster_count(&self) -> Option<c_int>;
+    fn cluster_count(&self) -> Option<c_int> { None }
 
-    fn number(&self) -> c_long;
-    fn codec(&self) -> Option<Vec<u8>>;
+    fn number(&self) -> c_long { 0 }
+    fn codec(&self) -> Option<Vec<u8>> { None }
     fn cluster<'a>(&'a self, cluster_index: i32) -> Result<Box<Cluster + 'a>,()>;
 }
 
@@ -81,8 +81,15 @@ pub trait VideoTrack<'a> : Track<'a> {
     /// Returns the height of this track in pixels.
     fn height(&self) -> u16;
 
+    /// Returns the number of times this track should be played.
+    ///
+    /// `0` indicates infinite loop.
+    fn num_iterations(&self) -> u32 { 1 }
+
     /// Returns the frame rate of this track in Hertz.
-    fn frame_rate(&self) -> c_double;
+    ///
+    /// Since this isn't constant for all codecs, this is largely a debugging tool.
+    fn frame_rate(&self) -> c_double { 0.0 }
 
     /// Returns a the pixel format of this track. This is usually derived from the codec. If the
     /// pixel format is indexed, ignore the associated palette; each frame can have its own
