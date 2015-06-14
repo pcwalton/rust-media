@@ -111,9 +111,9 @@ impl<'a> ExampleVideoRenderer<'a> {
         }
     }
 
-    fn present(&mut self, 
-                image: Box<DecodedVideoFrame + 'static>, 
-                player: &mut Player, 
+    fn present(&mut self,
+                image: Box<DecodedVideoFrame + 'static>,
+                player: &mut Player,
                 sdl_context: &sdl2::Sdl) {
 
         let video_track = player.video_track().unwrap();
@@ -141,6 +141,7 @@ impl<'a> ExampleVideoRenderer<'a> {
                     stride as usize * height + 2 * ((stride / 2) as usize * (height / 2))
                 }
                 PixelFormat::Rgb24 => stride as usize * height,
+                PixelFormat::Rgba32 => stride as usize * height,
                 _ => {
                     panic!("SDL can't natively render in {:?}!",
                            output_video_format.media_pixel_format)
@@ -180,6 +181,10 @@ impl SdlVideoFormat {
             PixelFormat::Indexed(_) | PixelFormat::Rgb24 => {
                 (PixelFormat::Rgb24, PixelFormatEnum::RGB24)
             }
+            // FIXME(Gankro): this should be Rgba32 and PixelFormatEnum::RGBA8888
+            // unfortuantely something is wrong with our translation to RGBA8888,
+            // so for now let's just forget the alpha channel.
+            PixelFormat::Rgba32 => (PixelFormat::Rgb24, PixelFormatEnum::RGB24),
         };
         SdlVideoFormat {
             media_pixel_format: media_pixel_format,
@@ -285,6 +290,7 @@ fn upload_image(video_track: &VideoTrack,
              vec![output_stride as usize, output_chroma_stride, output_chroma_stride])
         }
         PixelFormat::Rgb24 => (vec![output_pixels], vec![output_stride as usize]),
+        PixelFormat::Rgba32 => (vec![output_pixels], vec![output_stride as usize]),
         _ => panic!("SDL can't natively render in {:?}!", output_video_format.media_pixel_format),
     };
 
@@ -351,7 +357,7 @@ fn main() {
         let target_time = duration_from_nanos(media_player.playback_start_wallclock_time)
             + target_time_since_playback_start;
         let cur_time = duration_from_nanos(clock_ticks::precise_time_ns());
-        
+
         if cur_time < target_time {
             thread::sleep(target_time - cur_time);
         }

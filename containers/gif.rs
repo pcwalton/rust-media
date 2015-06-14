@@ -10,475 +10,141 @@
 //! (Animated) GIF support.
 //!
 //! GIF is treated as both a container and a video codec.
+//!
+//! # THE GIF STANDARD:
+//!
+//! See http://giflib.sourceforge.net/whatsinagif/ for detailed docs.
+//!
+//! Gif is full of tons of junk that we don't really care about, so here's a rough sketch of the
+//! spec and features we care about:
+//!
+//! **GIF is a Little Endian format**
+//!
+//! For brevity and easy search:
+//! * GCT = Global Colour Table
+//! * LCT = Local Colour Table
+//!
+//! ## Image Prelude (only once, at the start of the file)
+//!
+//! * Header - 6 bytes
+//!     * "GIF87a" or "GIF89a"
+//! * Logical Screen Descriptor - 7 bytes
+//!     * bytes 0-3: (width: u16, height: u16)
+//!     * byte 4:    GCT MEGA FIELD
+//!         * bit 0:    GCT flag (whether there will be one)
+//!         * bits 1-3: GCT resolution -- ?????? LEGACY GARBAGE ?????
+//!         * bit 4:    LEGACY GARBAGE about sorting
+//!         * bits 5-7: GCT size -- k -> 2^(k + 1) entries in the GCT
+//!     * byte 5:    GCT background colour index
+//!     * byte 6:    LEGACY GARBAGE about non-square pixels
+//! * If the GCT flag was set, the GCT follows (otherwise just go to the next section)
+//!     * Array of RGB triples (1 byte per channel = 3 bytes per colour)
+//!     * GCT size = k -> 3*2^(k + 1) bytes
+//!
+//!
+//! ## Image body (this loops forever)
+//!
+//!     * First byte: what's the next thing?
+//!         * '3B': End of file -- We're done!!!!
+//!         * '21': An Extension, type determined by the next byte
+//!             * '01': Plain Text Extension - variable length LEGACY GARBAGE
+//!                 * read the byte
+//!                     * if it's 0 we're done
+//!                     * otherwise cur += data[cur] + 1; loop
+//!             * 'FE': Comment Extension - variable length LEGACY GARBAGE
+//!                 * read the byte
+//!                     * if it's 0 we're done
+//!                     * otherwise cur += data[cur] + 1; loop
+//!             * 'FF': Application Extension (looping!) - 17 bytes
+//!                 * byte 0:      'OB'
+//!                 * bytes 1-11:  "NETSCAPE2.0" (yes, really!)
+//!                 * byte 12:     '03'
+//!                 * byte 13:     '01'
+//!                 * bytes 14-15: u16 number of times to play, 0 = "forever"
+//!                 * byte 16:     '00'
+//!             * 'F9': Graphics Control Extension (transparency and frame length!) - 6 bytes
+//!                 * byte 0:    '04'
+//!                 * byte 1:    RENDERING MEGA FIELD
+//!                     * bits 0-2: reserved LEGACY GARBAGE
+//!                     * bits 3-5: disposal method
+//!                         * 0: unspecified (this image is not animated?)
+//!                         * 1: draw this frame on top of the current image
+//!                         * 2: clear image to background colour
+//!                         * 3: draw this frame on top of the previous image (does this happen?)
+//!                     * bit 6:    LEGACY GARBAGE about user input
+//!                     * bit 7:    transparent colour flag
+//!                 * bytes 2-3: u16 frame length in hundredths-of-a-second
+//!                 * byte 4:    transparent colour index
+//!                     * if transparent flag set, interpret this colour index as 100% transparent
+//!                     * note that this means "reuse the old pixel" if using disposal current/prev
+//!                 * byte 5: '00'
+//!         * '2C': An Actual Image:
+//!             * image descriptor info - 9 bytes
+//!                 * bytes 0-7: (x: u16, y: u16, width: u16, height: u16)
+//!                 * byte 8: LCT MEGA FIELD
+//!                     * bit 0:    LCT flag (whether there will be one)
+//!                     * bit 1:    Interlace flag (whether the image data is interlaced)
+//!                     * bits 2-4: LEGACY GARBAGE about sorting/reserved
+//!                     * bits 5-7: LCT size -- k -> 2^(k + 1) entries in the LCT
+//!             * If the LCT flag was set, the LCT follows (otherwise just go to the next section)
+//!                 * Same format as GCT; see above
+//!             * Image Data: this is a variable-length pseudo-LZW encoding
+//!                 * byte 0:   minimum LZW code size (used in decompression)
+//!                 * blocks of LZW data until you hit one that has size 0
+//!                     * byte 0: block size in bytes (not including this one!)
+//!                     * bytes 1-n: LZW'd data
+//!
+//!
+//! ## Decoding Image Data
+//!
+//! Image data is just a series of one-bytes indices into the local or global colour table
+//! (use global if local flag wasn't set -- they can't both not be set). The indices are
+//! the pixels in "english reading order": left to right, then top to bottom.
+//!
+//! Unfortunately for us, this data is encoded in a pseudo-LZW-compressed format. How to walk
+//! through that format is explained above. Decoding it is super complicated though, and I really
+//! don't understand it. This is the one place I basically deferred to GIFLIB's implementation
+//! with occassional cleanups.
+//!
+//! A very minimal GIF
+//! Header:      47 49 46 38 39 61                           - "GIF89a"
+//! LSD:         0A 00 0A 00   91   00   00                  - 91 = 1 001 0 001 - GCT w/ 4 colours
+//! GCT:         FF FF FF   FF 00 00   00 00 FF   00 00 00   - white, red, blue, black
+//! GraphExt:    21 F9   04   00   00 00   00   00           - no animation or transparency
+//! Image:       2C
+//!      desc:   00 00   00 00   0A 00   0A 00   00          - 10x10 img, no LCT, no interlace
+//!      data:   02   16   8C 2D 99 87 2A 1C DC 33 A0 02 75 EC 95 FA A8 DE 60 8C 04 91 4C 01   00
+//!      data block (thing that starts with 8C) in binary:
+//! EOF:         3B
 
 #![allow(non_snake_case)]
 
 use container;
-use pixelformat::{Palette, PixelFormat, RgbColor};
+use pixelformat::PixelFormat;
 use streaming::StreamReader;
 use timing::Timestamp;
 use videodecoder;
 
-use libc::{self, c_double, c_int, c_long, c_uchar, c_uint, c_void, size_t};
+use libc::{c_int, c_long, c_uint};
 use std::cell::RefCell;
-use std::i32;
-use std::mem;
-use std::io::{BufReader, BufWriter, Read, Write};
-use std::io::SeekFrom;
-use std::ptr;
-use std::slice;
-use std::marker::PhantomData;
-
-use byteorder::{LittleEndian, WriteBytesExt, ReadBytesExt};
-
-#[repr(C)]
-#[unsafe_no_drop_flag]
-pub struct FileType {
-    /// The underlying file.
-    file: *mut ffi::GifFileType,
-    /// The byte position in the stream of the next record we have yet to read.
-    next_record_byte_offset: u64,
-}
-
-impl Drop for FileType {
-    fn drop(&mut self) {
-        unsafe {
-            ffi::DGifCloseFile(self.file, &mut 0);
-        }
-    }
-}
-
-impl FileType {
-    pub fn new(reader: Box<StreamReader>) -> Result<FileType, c_int> {
-        let mut error = 0;
-        let file = unsafe {
-            ffi::DGifOpen(mem::transmute::<Box<Box<_>>, *mut c_void>(Box::new(reader)),
-                          read_func,
-                          &mut error)
-        };
-        if !file.is_null() {
-            let mut file = FileType {
-                file: file,
-                next_record_byte_offset: 0,
-            };
-            file.next_record_byte_offset = file.reader().seek(SeekFrom::Current(0)).unwrap();
-            Ok(file)
-        } else {
-            Err(error)
-        }
-    }
-
-    pub fn reader<'a>(&'a mut self) -> &'a mut StreamReader {
-        unsafe {
-            let reader: &mut Box<Box<StreamReader>> = mem::transmute(&mut (*self.file).UserData);
-            &mut ***reader
-        }
-    }
-
-    pub fn slurp(&mut self) -> Result<(),c_int> {
-        unsafe {
-            (*self.file).ExtensionBlocks = ptr::null_mut();
-            (*self.file).ExtensionBlockCount = 0;
-            loop {
-                match self.read_record() {
-                    Ok(true) => {}
-                    Ok(false) => break,
-                    Err(_) => return Err((*self.file).Error),
-                }
-            }
-        }
-        Ok(())
-    }
-
-    /// This function is a port of the inner loop of `DGifSlurp()`. Returns true if there are more
-    /// records or false if we're done.
-    pub fn read_record(&mut self) -> Result<bool,()> {
-        let next_record_byte_offset = self.next_record_byte_offset;
-        self.reader().seek(SeekFrom::Start(next_record_byte_offset)).unwrap();
-
-        let mut record_type = 0;
-        unsafe {
-            if ffi::DGifGetRecordType(self.file, &mut record_type) == ffi::GIF_ERROR {
-                return Err(())
-            }
-        }
-
-        match record_type {
-            ffi::IMAGE_DESC_RECORD_TYPE => {
-                unsafe {
-                    if ffi::DGifGetImageDesc(self.file) == ffi::GIF_ERROR {
-                        return Err(())
-                    }
-
-                    {
-                        let saved_images = self.mut_saved_images();
-                        let saved_image = saved_images.last_mut().unwrap();
-                        saved_image.RasterBits = ptr::null_mut();
-                    }
-
-                    if !(*self.file).ExtensionBlocks.is_null() {
-                        let extension_blocks = (*self.file).ExtensionBlocks;
-                        let extension_block_count = (*self.file).ExtensionBlockCount;
-                        {
-                            let saved_images = self.mut_saved_images();
-                            let saved_image = saved_images.last_mut().unwrap();
-                            saved_image.ExtensionBlocks = extension_blocks;
-                            saved_image.ExtensionBlockCount = extension_block_count;
-                        }
-                        (*self.file).ExtensionBlocks = ptr::null_mut();
-                        (*self.file).ExtensionBlockCount = 0;
-                    }
-                }
-
-                if self.read_image().is_err() {
-                    return Err(())
-                }
-            }
-            ffi::EXTENSION_RECORD_TYPE => {
-                unsafe {
-                    let (mut ext_function, mut ext_data) = (0, ptr::null_mut());
-                    if ffi::DGifGetExtension(self.file, &mut ext_function, &mut ext_data) ==
-                            ffi::GIF_ERROR {
-                        return Err(())
-                    }
-
-                    if !ext_data.is_null() {
-                        if ffi::GifAddExtensionBlock(&mut (*self.file).ExtensionBlockCount,
-                                                     &mut (*self.file).ExtensionBlocks,
-                                                     ext_function,
-                                                     *ext_data as c_uint,
-                                                     ext_data.offset(1)) == ffi::GIF_ERROR {
-                            return Err(())
-                        }
-                    }
-
-                    while !ext_data.is_null() {
-                        if ffi::DGifGetExtensionNext(self.file, &mut ext_data) == ffi::GIF_ERROR {
-                            return Err(())
-                        }
-                        if !ext_data.is_null() {
-                            if ffi::GifAddExtensionBlock(&mut (*self.file).ExtensionBlockCount,
-                                                         &mut (*self.file).ExtensionBlocks,
-                                                         ffi::CONTINUE_EXT_FUNC_CODE,
-                                                         *ext_data as c_uint,
-                                                         ext_data.offset(1)) == ffi::GIF_ERROR {
-                                return Err(())
-                            }
-                        }
-                    }
-                }
-            }
-            _ => return Ok(false),
-        }
-
-        self.next_record_byte_offset = self.reader().seek(SeekFrom::Current(0)).unwrap();
-        Ok(true)
-    }
-
-    /// A port of a section of `DGifSlurp`.
-    fn read_image(&mut self) -> Result<(),()> {
-        unsafe {
-            let saved_image = self.mut_saved_images().last_mut().unwrap();
-            if !saved_image.RasterBits.is_null() {
-                // Already read!
-                return Ok(())
-            }
-
-            let image_size = saved_image.ImageDesc.Width * saved_image.ImageDesc.Height;
-            let image_byte_size = image_size as usize * mem::size_of::<ffi::GifPixelType>();
-            assert!(image_byte_size <= i32::MAX as usize);
-            saved_image.RasterBits = libc::malloc(image_size as size_t) as *mut c_uchar;
-            if saved_image.RasterBits.is_null() {
-                return Err(())
-            }
-            let mut raster_bits = slice::from_raw_parts_mut(saved_image.RasterBits,
-                                                          image_size as usize);
-
-            if (*saved_image).ImageDesc.Interlace {
-                // From `DGifSlurp()`: "The way an interlaced image should be read: offsets and
-                // jumps…"
-                static INTERLACED_OFFSETS: [u8; 4] = [ 0, 4, 2, 1 ];
-                static INTERLACED_JUMPS: [u8; 4] = [ 8, 8, 4, 2 ];
-
-                // Perform four passes on the image.
-                for (i, &j) in INTERLACED_OFFSETS.iter().enumerate() {
-                    let mut j = j as c_int;
-                    while j <= saved_image.ImageDesc.Height {
-                        let width = saved_image.ImageDesc.Width;
-                        let dest =
-                            &mut raster_bits[((j * width) as usize)..((j + 1) * width) as usize];
-                        assert!(dest.len() <= i32::MAX as usize);
-                        if ffi::DGifGetLine(self.file, dest.as_mut_ptr(), dest.len() as i32) ==
-                                ffi::GIF_ERROR {
-                            return Err(())
-                        }
-                        j += INTERLACED_JUMPS[i] as c_int;
-                    }
-                }
-            } else if ffi::DGifGetLine(self.file,
-                                       raster_bits.as_mut_ptr(),
-                                       raster_bits.len() as i32) ==
-                    ffi::GIF_ERROR {
-                return Err(())
-            }
-        }
-        Ok(())
-    }
-
-    pub fn width(&self) -> ffi::GifWord {
-        unsafe {
-            (*self.file).SWidth
-        }
-    }
-
-    pub fn height(&self) -> ffi::GifWord {
-        unsafe {
-            (*self.file).SHeight
-        }
-    }
-
-    pub fn color_map<'a>(&'a self) -> Option<ColorMapObject<'a>> {
-        unsafe {
-            if !(*self.file).SColorMap.is_null() {
-                Some(ColorMapObject {
-                    map: (*self.file).SColorMap,
-                    phantom: PhantomData,
-                })
-            } else {
-                None
-            }
-        }
-    }
-
-    pub fn saved_images<'a>(&'a self) -> &'a [SavedImage] {
-        unsafe {
-            slice::from_raw_parts((*self.file).SavedImages, (*self.file).ImageCount as usize)
-        }
-    }
-
-    pub unsafe fn mut_saved_images<'a>(&'a mut self) -> &'a mut [SavedImage] {
-        slice::from_raw_parts_mut((*self.file).SavedImages, (*self.file).ImageCount as usize)
-    }
-
-    pub fn extension_block_count(&self) -> c_int {
-        unsafe {
-            (*self.file).ExtensionBlockCount
-        }
-    }
-
-    pub fn extension_block<'a>(&'a self, index: c_int) -> ExtensionBlock<'a> {
-        assert!(index >= 0 && index < self.extension_block_count());
-        unsafe {
-            ExtensionBlock::from_ptr((*self.file).ExtensionBlocks.offset(index as isize))
-        }
-    }
-}
-
-extern "C" fn read_func(file: *mut ffi::GifFileType, buffer: *mut ffi::GifByteType, len: c_int)
-                        -> c_int {
-    if len < 0 {
-        return -1
-    }
-
-    unsafe {
-        let reader: &mut Box<Box<StreamReader>> = mem::transmute(&mut (*file).UserData);
-        match reader.read(slice::from_raw_parts_mut(buffer, len as usize)) {
-            Ok(number_read) => number_read as c_int,
-            _ => -1
-        }
-    }
-}
-
-#[repr(C)]
-pub struct SavedImage {
-    ImageDesc: ffi::GifImageDesc,
-    RasterBits: *mut ffi::GifByteType,
-    ExtensionBlockCount: c_int,
-    ExtensionBlocks: *mut ffi::ExtensionBlock,
-}
-
-impl SavedImage {
-    pub fn raster_bits<'a>(&'a self) -> &'a [ffi::GifByteType] {
-        unsafe {
-            slice::from_raw_parts_mut(self.RasterBits,
-                                    self.ImageDesc.Width as usize * self.ImageDesc.Height as usize)
-        }
-    }
-
-    pub fn image_desc<'a>(&'a self) -> ImageDesc<'a> {
-        ImageDesc {
-            desc: &self.ImageDesc,
-        }
-    }
-
-    pub fn extension_block_count(&self) -> c_int {
-        self.ExtensionBlockCount
-    }
-
-    pub fn extension_block<'a>(&'a self, index: c_int) -> ExtensionBlock<'a> {
-        assert!(index >= 0 && index < self.extension_block_count());
-        unsafe {
-            ExtensionBlock::from_ptr(self.ExtensionBlocks.offset(index as isize))
-        }
-    }
-}
-
-#[derive(Copy, Clone)]
-pub struct ImageDesc<'a> {
-    desc: &'a ffi::GifImageDesc,
-}
-
-impl<'a> ImageDesc<'a> {
-    pub fn width(&self) -> ffi::GifWord {
-        self.desc.Width
-    }
-
-    pub fn height(&self) -> ffi::GifWord {
-        self.desc.Height
-    }
-
-    pub fn interlace(&self) -> bool {
-        self.desc.Interlace
-    }
-
-    pub fn color_map(&self) -> Option<ColorMapObject<'a>> {
-        if !self.desc.ColorMap.is_null() {
-            Some(ColorMapObject {
-                map: self.desc.ColorMap,
-                phantom: PhantomData,
-            })
-        } else {
-            None
-        }
-    }
-}
-
-pub struct ColorMapObject<'a> {
-    map: *mut ffi::ColorMapObject,
-    phantom: PhantomData<&'a u8>,
-}
-
-impl<'a> ColorMapObject<'a> {
-    pub fn bits_per_pixel(&self) -> c_int {
-        unsafe {
-            (*self.map).BitsPerPixel
-        }
-    }
-
-    pub fn colors(&'a self) -> &'a [ffi::GifColorType] {
-        unsafe {
-            slice::from_raw_parts_mut((*self.map).Colors, (*self.map).ColorCount as usize)
-        }
-    }
-}
-
-pub enum ExtensionBlock<'a> {
-    Continue,
-    Comment(&'a [u8]),
-    Graphics(GraphicsControlBlock),
-    Plaintext(&'a [u8]),
-    Application(&'a [u8]),
-    Other,
-}
-
-impl<'a> ExtensionBlock<'a> {
-    unsafe fn from_ptr(block: *mut ffi::ExtensionBlock) -> ExtensionBlock<'a> {
-        return match (*block).Function {
-            ffi::CONTINUE_EXT_FUNC_CODE => ExtensionBlock::Continue,
-            ffi::COMMENT_EXT_FUNC_CODE => ExtensionBlock::Comment(to_byte_slice(block)),
-            ffi::GRAPHICS_EXT_FUNC_CODE => {
-                let mut graphics_control_block = ffi::GraphicsControlBlock {
-                    DisposalMode: 0,
-                    UserInputFlag: false,
-                    DelayTime: 0,
-                    TransparentColor: 0,
-                };
-                assert!(ffi::DGifExtensionToGCB((*block).ByteCount as size_t,
-                                                (*block).Bytes,
-                                                &mut graphics_control_block) == ffi::GIF_OK);
-                ExtensionBlock::Graphics(GraphicsControlBlock {
-                    block: graphics_control_block,
-                })
-            }
-            ffi::PLAINTEXT_EXT_FUNC_CODE => ExtensionBlock::Plaintext(to_byte_slice(block)),
-            ffi::APPLICATION_EXT_FUNC_CODE => ExtensionBlock::Application(to_byte_slice(block)),
-            _ => ExtensionBlock::Other,
-        };
-
-        unsafe fn to_byte_slice<'a>(block: *mut ffi::ExtensionBlock) -> &'a [u8] {
-            assert!((*block).ByteCount >= 0);
-            slice::from_raw_parts_mut((*block).Bytes, (*block).ByteCount as usize)
-        }
-    }
-}
-
-pub struct GraphicsControlBlock {
-    block: ffi::GraphicsControlBlock,
-}
-
-impl GraphicsControlBlock {
-    /// Particular way to initialize the pixels of the frame
-    pub fn disposal_mode(&self) -> DisposalMode {
-        // FIXME(Gankro): didn't want to pull in a whole crate/syntex for FromPrimitive
-        match self.block.DisposalMode {
-            ffi::DISPOSAL_UNSPECIFIED => DisposalMode::Unspecified,
-            ffi::DISPOSE_DO_NOT => DisposalMode::DoNot,
-            ffi::DISPOSE_BACKGROUND => DisposalMode::Background,
-            ffi::DISPOSE_PREVIOUS => DisposalMode::Previous,
-            _ => unreachable!(),
-        }
-    }
-
-    /// archaic; specifies that the gif should wait for user input before proceeding.
-    pub fn user_input_flag(&self) -> bool {
-        self.block.UserInputFlag
-    }
-
-    pub fn delay_time(&self) -> c_int {
-        self.block.DelayTime
-    }
-
-    /// Which colour index to interpret as a transparent pixel.
-    /// Note: this still overwrites a non-trasparent pixel.
-    pub fn transparent_color(&self) -> Option<c_int> {
-        let color = self.block.TransparentColor;
-        if color >= 0 {
-            Some(color)
-        } else {
-            None
-        }
-    }
-}
-
-#[repr(i32)]
-#[derive(Copy, Clone)]
-/// Specifies what state to initialize the frame's pixels in
-pub enum DisposalMode {
-    // Treat this like Background, I guess
-    Unspecified = ffi::DISPOSAL_UNSPECIFIED,
-    // Use the previous frame as the starting point
-    DoNot = ffi::DISPOSE_DO_NOT,
-    // Blank the frame to the background colour
-    Background = ffi::DISPOSE_BACKGROUND,
-    // Use the previous-previous frame as the starting point (archaic?)
-    Previous = ffi::DISPOSE_PREVIOUS,
-}
-
-// Implementation of the abstract `ContainerReader` interface
+use std::io::{Read, Error};
+use std::io::Result as IoResult;
+use std::io::ErrorKind::InvalidInput;
 
 pub struct ContainerReaderImpl {
-    file: RefCell<FileType>,
+    gif: RefCell<Gif>,
 }
 
 impl ContainerReaderImpl {
     pub fn new(reader: Box<StreamReader>) -> Result<Box<container::ContainerReader + 'static>,()> {
-        let file = match FileType::new(reader) {
-            Ok(file) => file,
-            Err(_) => return Err(()),
+        let gif = match Gif::new(reader) {
+            Ok(gif) => gif,
+            _ => return Err(()),
         };
+
         Ok(Box::new(ContainerReaderImpl {
-            file: RefCell::new(file),
-        }) as Box<container::ContainerReader + 'static>)
+            gif: RefCell::new(gif),
+        }))
     }
 }
 
@@ -487,131 +153,71 @@ impl container::ContainerReader for ContainerReaderImpl {
         1
     }
     fn track_by_index<'a>(&'a self, _: u16) -> Box<container::Track + 'a> {
-        Box::new(TrackImpl {
-            file: &self.file,
-        }) as Box<container::Track + 'a>
+        Box::new(VideoTrackImpl {
+            gif: &self.gif,
+        })
     }
     fn track_by_number<'a>(&'a self, _: c_long) -> Box<container::Track + 'a> {
         self.track_by_index(0)
     }
 }
 
-struct TrackImpl<'a> {
-    file: &'a RefCell<FileType>,
-}
-
-impl<'a> container::Track<'a> for TrackImpl<'a> {
-    fn track_type(self: Box<Self>) -> container::TrackType<'a> {
-        container::TrackType::Video(Box::new(VideoTrackImpl {
-            file: self.file,
-        }) as Box<container::VideoTrack<'a> + 'a>)
-    }
-
-    fn is_video(&self) -> bool { true }
-    fn is_audio(&self) -> bool { false }
-
-    fn cluster_count(&self) -> Option<c_int> {
-        None
-    }
-
-    fn number(&self) -> c_long {
-        0
-    }
-
-    fn codec(&self) -> Option<Vec<u8>> {
-        Some(vec![b'G', b'I', b'F', b'f'])
-    }
-
-    fn cluster<'b>(&'b self, cluster_index: i32) -> Result<Box<container::Cluster + 'b>,()> {
-        get_cluster(self.file, cluster_index)
-    }
-}
-
 struct VideoTrackImpl<'a> {
-    file: &'a RefCell<FileType>,
+    gif: &'a RefCell<Gif>,
 }
 
 impl<'a> container::Track<'a> for VideoTrackImpl<'a> {
     fn track_type(self: Box<Self>) -> container::TrackType<'a> {
-        container::TrackType::Video(Box::new(VideoTrackImpl {
-            file: self.file,
-        }) as Box<container::VideoTrack<'a> + 'a>)
+        container::TrackType::Video(self)
     }
 
     fn is_video(&self) -> bool { true }
-    fn is_audio(&self) -> bool { false }
-
-    fn cluster_count(&self) -> Option<c_int> {
-        None
-    }
-
-    fn number(&self) -> c_long {
-        0
-    }
 
     fn codec(&self) -> Option<Vec<u8>> {
-        Some(vec![b'G', b'I', b'F', b'f'])
+        Some(b"GIFf".to_vec())
     }
 
     fn cluster<'b>(&'b self, cluster_index: i32) -> Result<Box<container::Cluster + 'b>,()> {
-        get_cluster(self.file, cluster_index)
+        // Read and decode frames until we get to the given cluster index.
+        while self.gif.borrow().frames.len() < (cluster_index as usize + 1) {
+            match self.gif.borrow_mut().parse_next_frame() {
+                Err(_) | Ok(false) => return Err(()),
+                Ok(true) => {}
+            }
+        }
+
+        Ok(Box::new(ClusterImpl {
+            gif: self.gif,
+            frame_index: cluster_index as usize,
+        }))
     }
 }
 
 impl<'a> container::VideoTrack<'a> for VideoTrackImpl<'a> {
     fn width(&self) -> u16 {
-        self.file.borrow().width() as u16
+        self.gif.borrow().width as u16
     }
 
     fn height(&self) -> u16 {
-        self.file.borrow().height() as u16
-    }
-
-    fn frame_rate(&self) -> c_double {
-        // NB: This assumes a constant frame rate. Not all GIFs have one, however…
-        for saved_image in self.file.borrow().saved_images().iter() {
-            for i in 0..saved_image.extension_block_count() {
-                if let ExtensionBlock::Graphics(block) = saved_image.extension_block(i) {
-                    return 1.0 / ((block.delay_time() as c_double) * 0.01)
-                }
-            }
-        }
-        for i in 0..self.file.borrow().extension_block_count() {
-            if let ExtensionBlock::Graphics(block) = self.file.borrow().extension_block(i) {
-                return 1.0 / ((block.delay_time() as c_double) * 0.01)
-            }
-        }
-        1.0
+        self.gif.borrow().height as u16
     }
 
     fn pixel_format(&self) -> PixelFormat<'static> {
-        PixelFormat::Indexed(Palette::empty())
+        PIXEL_FORMAT
+    }
+
+    fn num_iterations(&self) -> u32 {
+        self.gif.borrow().num_iterations as u32
     }
 
     fn headers(&self) -> Box<videodecoder::VideoHeaders> {
-        Box::new(videodecoder::EmptyVideoHeadersImpl) as Box<videodecoder::VideoHeaders>
+        Box::new(videodecoder::EmptyVideoHeadersImpl)
     }
-}
-
-fn get_cluster<'a>(file: &'a RefCell<FileType>, cluster_index: i32)
-                   -> Result<Box<container::Cluster + 'a>,()> {
-    // Read and decode frames until we get to the given cluster index.
-    while file.borrow().saved_images().len() < (cluster_index as usize + 1) {
-        match file.borrow_mut().read_record() {
-            Err(_) | Ok(false) => return Err(()),
-            Ok(true) => {}
-        }
-    }
-
-    Ok(Box::new(ClusterImpl {
-        file: file,
-        image_index: cluster_index as usize,
-    }) as Box<container::Cluster + 'a>)
 }
 
 struct ClusterImpl<'a> {
-    file: &'a RefCell<FileType>,
-    image_index: usize,
+    gif: &'a RefCell<Gif>,
+    frame_index: usize,
 }
 
 impl<'a> container::Cluster for ClusterImpl<'a> {
@@ -619,8 +225,8 @@ impl<'a> container::Cluster for ClusterImpl<'a> {
                   -> Result<Box<container::Frame + 'b>,()> {
         if frame_index == 0 {
             Ok(Box::new(FrameImpl {
-                file: self.file,
-                image_index: self.image_index,
+                gif: self.gif,
+                frame_index: self.frame_index,
             }) as Box<container::Frame + 'b>)
         } else {
             Err(())
@@ -629,42 +235,19 @@ impl<'a> container::Cluster for ClusterImpl<'a> {
 }
 
 struct FrameImpl<'a> {
-    file: &'a RefCell<FileType>,
-    image_index: usize,
+    gif: &'a RefCell<Gif>,
+    frame_index: usize,
 }
 
 impl<'a> container::Frame for FrameImpl<'a> {
     fn len(&self) -> c_long {
-        let file = self.file.borrow();
-        let saved_image = &file.saved_images()[self.image_index];
-        let color_map = match saved_image.image_desc().color_map() {
-            Some(map) => map,
-            None => file.color_map().unwrap(),
-        };
-        (2 + (color_map.colors().len() * 3) + saved_image.raster_bits().len()) as c_long
+        self.gif.borrow().frames[self.frame_index].data.len() as c_long
     }
 
     fn read(&self, buffer: &mut [u8]) -> Result<(),()> {
-        let file = self.file.borrow();
-        let saved_image = &file.saved_images()[self.image_index];
-        let mut writer = BufWriter::new(buffer);
-        let color_map = match saved_image.image_desc().color_map() {
-            Some(map) => map,
-            None => file.color_map().unwrap(),
-        };
-
-        if writer.write_u16::<LittleEndian>(color_map.colors().len() as u16).is_err() {
-            return Err(())
-        }
-        for color in color_map.colors().iter() {
-            if writer.write_all(&[color.Red, color.Green, color.Blue]).is_err() {
-                return Err(())
-            }
-        }
-        match writer.write_all(saved_image.raster_bits()) {
-            Ok(_) => Ok(()),
-            Err(_) => Err(()),
-        }
+        ::std::slice::bytes::copy_memory(&self.gif.borrow().frames[self.frame_index].data,
+                                         buffer);
+        Ok(())
     }
 
     fn track_number(&self) -> c_long {
@@ -672,37 +255,15 @@ impl<'a> container::Frame for FrameImpl<'a> {
     }
 
     fn time(&self) -> Timestamp {
-        get_time(self.file, self.image_index)
+        let time = self.gif.borrow().frames[self.frame_index].time;
+        Timestamp {
+            ticks: time as i64,
+            ticks_per_second: 100.0,
+        }
     }
 
     fn rendering_offset(&self) -> i64 {
         0
-    }
-}
-
-/// FIXME(pcwalton): This is O(n)!
-fn get_time(file: &RefCell<FileType>, image_index: usize) -> Timestamp {
-    let mut time_so_far = 0;
-    for (i, saved_image) in file.borrow().saved_images().iter().enumerate() {
-        if i >= image_index {
-            break
-        }
-        for j in 0..saved_image.extension_block_count() {
-            if let ExtensionBlock::Graphics(block) = saved_image.extension_block(j) {
-                time_so_far = time_so_far + block.delay_time() as i64
-            }
-        }
-    }
-    if time_so_far == 0 {
-        for i in 0..file.borrow().extension_block_count() {
-            if let ExtensionBlock::Graphics(block) = file.borrow().extension_block(i) {
-                time_so_far = time_so_far + block.delay_time() as i64
-            }
-        }
-    }
-    Timestamp {
-        ticks: time_so_far,
-        ticks_per_second: 100.0,
     }
 }
 
@@ -716,84 +277,54 @@ pub const CONTAINER_READER: container::RegisteredContainerReader =
 
 #[allow(missing_copy_implementations)]
 struct VideoDecoderImpl {
-    width: c_int,
-    height: c_int,
+    width: u32,
+    height: u32,
 }
 
 impl VideoDecoderImpl {
     fn new(_: &videodecoder::VideoHeaders, width: i32, height: i32)
            -> Result<Box<videodecoder::VideoDecoder + 'static>,()> {
         Ok(Box::new(VideoDecoderImpl {
-            width: width,
-            height: height,
-        }) as Box<videodecoder::VideoDecoder + 'static>)
+            width: width as u32,
+            height: height as u32,
+        }))
     }
 }
 
 impl videodecoder::VideoDecoder for VideoDecoderImpl {
     fn decode_frame(&self, data: &[u8], presentation_time: &Timestamp)
                     -> Result<Box<videodecoder::DecodedVideoFrame + 'static>,()> {
-        let mut reader = BufReader::new(data);
-        let palette_size = match reader.read_u16::<LittleEndian>() {
-            Ok(size) => size,
-            Err(_) => return Err(()),
-        };
-        let mut palette = Vec::new();
-        let mut color_bytes = [0, 0, 0];
-        for _ in 0 .. palette_size {
-            match reader.read(&mut color_bytes) {
-                Ok(3) => {
-                    palette.push(RgbColor {
-                        r: color_bytes[0],
-                        g: color_bytes[1],
-                        b: color_bytes[2],
-                    })
-                }
-                _ => return Err(()),
-            }
-        }
-
-        let mut pixels = vec![];
-        match reader.read_to_end(&mut pixels) {
-            Ok(_) => {}, // Should we check anything here?
-            Err(_) => return Err(()),
-        }
-
         Ok(Box::new(DecodedVideoFrameImpl {
             width: self.width,
             height: self.height,
-            palette: palette,
-            pixels: pixels,
+            pixels: data.to_vec(),
             presentation_time: *presentation_time,
-        }) as Box<videodecoder::DecodedVideoFrame>)
+        }))
     }
 }
 
 struct DecodedVideoFrameImpl {
-    width: i32,
-    height: i32,
-    palette: Vec<RgbColor>,
+    width: u32,
+    height: u32,
     pixels: Vec<u8>,
     presentation_time: Timestamp,
 }
 
 impl videodecoder::DecodedVideoFrame for DecodedVideoFrameImpl {
     fn width(&self) -> c_uint {
-        self.width as c_uint
-    }
-
-    fn height(&self) -> c_uint {
-        self.height as c_uint
-    }
-
-    fn stride(&self, _: usize) -> c_int {
         self.width
     }
 
+    fn height(&self) -> c_uint {
+        self.height
+    }
+
+    fn stride(&self, _: usize) -> c_int {
+        (BYTES_PER_COL * self.width as usize) as c_int
+    }
+
     fn pixel_format<'a>(&'a self) -> PixelFormat<'a> {
-        PixelFormat::Indexed(Palette {
-            palette: &self.palette,
-        })
+        PIXEL_FORMAT
     }
 
     fn presentation_time(&self) -> Timestamp {
@@ -819,138 +350,628 @@ impl<'a> videodecoder::DecodedVideoFrameLockGuard for DecodedVideoFrameLockGuard
 
 pub const VIDEO_DECODER: videodecoder::RegisteredVideoDecoder =
     videodecoder::RegisteredVideoDecoder {
-        id: [ b'G', b'I', b'F', b'f' ],
+        id: *b"GIFf",
         constructor: VideoDecoderImpl::new,
     };
 
-pub mod ffi {
-    use libc::{c_char, c_int, c_uchar, c_uint, c_void, size_t};
 
-    use containers::gif::SavedImage;
 
-    pub const GIF_ERROR: c_int = 0;
-    pub const GIF_OK: c_int = 1;
 
-    pub const CONTINUE_EXT_FUNC_CODE: c_int = 0x00;
-    pub const COMMENT_EXT_FUNC_CODE: c_int = 0xfe;
-    pub const GRAPHICS_EXT_FUNC_CODE: c_int = 0xf9;
-    pub const PLAINTEXT_EXT_FUNC_CODE: c_int = 0x01;
-    pub const APPLICATION_EXT_FUNC_CODE: c_int = 0xff;
 
-    pub const DISPOSAL_UNSPECIFIED: c_int = 0;
-    pub const DISPOSE_DO_NOT: c_int = 1;
-    pub const DISPOSE_BACKGROUND: c_int = 2;
-    pub const DISPOSE_PREVIOUS: c_int = 3;
 
-    pub const NO_TRANSPARENT_COLOR: c_int = -1;
 
-    pub const UNDEFINED_RECORD_TYPE: GifRecordType = 0;
-    pub const SCREEN_DESC_RECORD_TYPE: GifRecordType = 1;
-    pub const IMAGE_DESC_RECORD_TYPE: GifRecordType = 2;
-    pub const EXTENSION_RECORD_TYPE: GifRecordType = 3;
-    pub const TERMINATE_RECORD_TYPE: GifRecordType = 4;
 
-    pub type GifPixelType = c_uchar;
-    pub type GifRowType = *mut c_uchar;
-    pub type GifByteType = c_uchar;
-    pub type GifPrefixType = c_uint;
-    pub type GifWord = c_int;
-    pub type GifRecordType = c_int;
-    pub type InputFunc = extern "C" fn(*mut GifFileType, *mut GifByteType, c_int) -> c_int;
 
-    #[repr(C)]
-    pub struct GifFileType {
-        pub SWidth: GifWord,
-        pub SHeight: GifWord,
-        pub SColorResolution: GifWord,
-        pub SBackGroundColor: GifWord,
-        pub AspectByte: GifByteType,
-        pub SColorMap: *mut ColorMapObject,
-        pub ImageCount: c_int,
-        pub Image: GifImageDesc,
-        pub SavedImages: *mut SavedImage,
-        pub ExtensionBlockCount: c_int,
-        pub ExtensionBlocks: *mut ExtensionBlock,
-        pub Error: c_int,
-        pub UserData: *mut c_void,
-        pub Private: *mut c_void,
+
+const HEADER_LEN: usize = 6;
+const GLOBAL_DESCRIPTOR_LEN: usize = 7;
+const LOCAL_DESCRIPTOR_LEN: usize = 9;
+const GRAPHICS_EXTENSION_LEN: usize = 6;
+const APPLICATION_EXTENSION_LEN: usize = 17;
+const MAX_COLOR_TABLE_SIZE: usize = 3 * 256; // 2^8 RGB colours
+
+const BLOCK_EOF: u8       = 0x3B;
+const BLOCK_EXTENSION: u8 = 0x21;
+const BLOCK_IMAGE: u8     = 0x2C;
+
+const EXTENSION_PLAIN: u8       = 0x01;
+const EXTENSION_COMMENT: u8     = 0xFE;
+const EXTENSION_GRAPHICS: u8    = 0xF9;
+const EXTENSION_APPLICATION: u8 = 0xFF;
+
+const DISPOSAL_UNSPECIFIED: u8 = 0;
+const DISPOSAL_CURRENT: u8 = 1;
+const DISPOSAL_BG: u8 = 2;
+const DISPOSAL_PREVIOUS: u8 = 3;
+
+const BYTES_PER_COL: usize = 4;
+const PIXEL_FORMAT: PixelFormat<'static> = PixelFormat::Rgba32;
+
+pub struct Gif {
+    pub width: usize,
+    pub height: usize,
+    /// Defaults to 1, but at some point we may discover a new value.
+    /// Presumably this should only happen once.
+    pub num_iterations: u16,
+    pub frames: Vec<Frame>,
+    gct_bg: usize,
+    gct: Option<Box<[u8; MAX_COLOR_TABLE_SIZE]>>,
+    data: Box<StreamReader>,
+}
+
+pub struct Frame {
+    pub time: u32,
+    pub duration: u32,
+    pub data: Vec<u8>
+}
+
+
+impl Gif {
+    /// Interpret the given Reader as an entire Gif file. Parses out the
+    /// prelude to get most metadata (some will show up later, maybe).
+    fn new (mut data: Box<StreamReader>) -> IoResult<Gif> {
+
+        // ~~~~~~~~~ Image Prelude ~~~~~~~~~~
+        let mut buf = [0; HEADER_LEN + GLOBAL_DESCRIPTOR_LEN];
+        try!(read_to_full(&mut data, &mut buf));
+
+        let (header, descriptor) = buf.split_at(HEADER_LEN);
+        if header != b"GIF87a" && header != b"GIF89a" { return Err(malformed()); }
+
+        let full_width = le_u16(descriptor[0], descriptor[1]);
+        let full_height = le_u16(descriptor[2], descriptor[3]);
+        let gct_mega_field = descriptor[4];
+        let gct_background_color_index = descriptor[5] as usize;
+        let gct_flag = (gct_mega_field & 0b1000_0000) != 0;
+        let gct_size_exponent = gct_mega_field & 0b0000_0111;
+        let gct_size = 1usize << (gct_size_exponent + 1); // 2^(k+1)
+
+        let gct = if gct_flag {
+            let mut gct_buf = Box::new([0; MAX_COLOR_TABLE_SIZE]);
+            {
+                let gct = &mut gct_buf[.. 3 * gct_size];
+                try!(read_to_full(&mut data, gct));
+            }
+            Some(gct_buf)
+        } else {
+            None
+        };
+
+        Ok(Gif {
+            width: full_width as usize,
+            height: full_height as usize,
+            num_iterations: 1, // This may be changed as we parse more
+            frames: vec![],
+            gct_bg: gct_background_color_index,
+            gct: gct,
+            data: data,
+        })
     }
 
-    #[repr(C)]
-    #[allow(missing_copy_implementations)]
-    pub struct GifImageDesc {
-        pub Left: GifWord,
-        pub Top: GifWord,
-        pub Width: GifWord,
-        pub Height: GifWord,
-        pub Interlace: bool,
-        pub ColorMap: *mut ColorMapObject,
+
+    /// Reads more of the stream until an entire new frame has been computed.
+    /// Returns `false` if the file ends, and `true` otherwise.
+    fn parse_next_frame(&mut self) -> IoResult<bool> {
+        // ~~~~~~~~~ Image Body ~~~~~~~~~~~
+
+        // local to this frame of the gif, but may be obtained at any time.
+        let mut transparent_index = None;
+        let mut frame_delay = 0;
+        let mut disposal_method = 0;
+
+        loop {
+            match try!(read_byte(&mut self.data)) {
+                BLOCK_EOF => {
+                    // TODO: check if this was a sane place to stop?
+                    return Ok(false)
+                }
+                BLOCK_EXTENSION => {
+                    // 3 to coalesce some checks we'll have to make in any branch
+                    match try!(read_byte(&mut self.data)) {
+                        EXTENSION_PLAIN | EXTENSION_COMMENT => {
+                            // This is legacy garbage, but has a variable length so
+                            // we need to parse it a bit to get over it.
+                            try!(skip_blocks(&mut self.data));
+                        }
+                        EXTENSION_GRAPHICS => {
+                            // Frame delay and transparency settings
+                            let mut ext = [0; GRAPHICS_EXTENSION_LEN];
+                            try!(read_to_full(&mut self.data, &mut ext));
+
+                            let rendering_mega_field = ext[1];
+                            let transparency_flag = (rendering_mega_field & 0b0000_0001) != 0;
+
+                            disposal_method = (rendering_mega_field & 0b0001_1100) >> 2;
+                            frame_delay = le_u16(ext[2], ext[3]);
+                            transparent_index = if transparency_flag {
+                                Some(ext[4])
+                            } else {
+                                None
+                            };
+                        }
+                        EXTENSION_APPLICATION => {
+                            // NETSCAPE 2.0 Looping Extension
+
+                            let mut ext = [0; APPLICATION_EXTENSION_LEN];
+                            try!(read_to_full(&mut self.data, &mut ext));
+
+                            // TODO: Verify this is the NETSCAPE 2.0 extension?
+
+                            self.num_iterations = le_u16(ext[14], ext[15]);
+                        }
+                        _ => { return Err(Error::new(InvalidInput, "Unknown extension type found")); }
+                    }
+                }
+                BLOCK_IMAGE => {
+                    let mut descriptor = [0; LOCAL_DESCRIPTOR_LEN];
+                    try!(read_to_full(&mut self.data, &mut descriptor));
+
+                    let x      = le_u16(descriptor[0], descriptor[1]) as usize;
+                    let y      = le_u16(descriptor[2], descriptor[3]) as usize;
+                    let width  = le_u16(descriptor[4], descriptor[5]) as usize;
+                    let height = le_u16(descriptor[6], descriptor[7]) as usize;
+
+                    let lct_mega_field = descriptor[8];
+                    let lct_flag = (lct_mega_field & 0b1000_0000) != 0;
+                    let interlace = (lct_mega_field & 0b0100_0000) != 0;
+                    let lct_size_exponent = (lct_mega_field & 0b0000_1110) >> 1;
+                    let lct_size = 1usize << (lct_size_exponent + 1); // 2^(k+1)
+
+
+                    let mut lct_buf = [0; MAX_COLOR_TABLE_SIZE];
+
+                    let lct = if lct_flag {
+                        let lct = &mut lct_buf[.. 3 * lct_size];
+                        try!(read_to_full(&mut self.data, lct));
+                        Some(&*lct)
+                    } else {
+                        None
+                    };
+
+                    let minimum_code_size = try!(read_byte(&mut self.data));
+
+                    let mut indices = vec![0; width * height]; //TODO: not this
+
+                    let mut parse_state = create_parse_state(minimum_code_size, width * height);
+
+                    /* For debugging
+                    println!("");
+                    println!("starting frame decoding: {}", self.frames.len());
+                    println!("x: {}, y: {}, w: {}, h: {}", x, y, width, height);
+                    println!("trans: {:?}, interlace: {}", transparent_index, interlace);
+                    println!("delay: {}, disposal: {}, iters: {:?}",
+                             frame_delay, disposal_method, self.num_iterations);
+                    println!("lct: {}, gct: {}", lct_flag, self.gct.is_some());
+                    */
+
+                    // ~~~~~~~~~~~~~~ DECODE THE INDICES ~~~~~~~~~~~~~~~~
+
+                    if interlace {
+                        let interlaced_offset = [0, 4, 2, 1];
+                        let interlaced_jumps = [8, 8, 4, 2];
+                        for i in 0..4 {
+                            let mut j = interlaced_offset[i];
+                            while j < height {
+                                try!(get_indices(&mut parse_state,
+                                                 &mut indices[j * width..],
+                                                 width,
+                                                 &mut self.data));
+                                j += interlaced_jumps[i];
+                            }
+                        }
+                    } else {
+                        try!(get_indices(&mut parse_state, &mut indices, width * height, &mut self.data));
+                    }
+
+                    // ~~~~~~~~~~~~~~ INITIALIZE THE BACKGROUND ~~~~~~~~~~~
+
+                    let num_bytes = self.width * self.height * BYTES_PER_COL;
+
+                    let mut pixels = match disposal_method {
+                        // Firefox says unspecified == current
+                        DISPOSAL_UNSPECIFIED | DISPOSAL_CURRENT => {
+                            self.frames.last().map(|frame| frame.data.clone())
+                                         .unwrap_or_else(|| vec![0; num_bytes])
+                        }
+                        DISPOSAL_BG => {
+                            vec![0; num_bytes]
+                            /*
+                            println!("BG disposal {}", self.gct_bg);
+                            let col_idx = self.gct_bg as usize;
+                            let color_map = self.gct.as_ref().unwrap();
+                            let is_transparent = transparent_index.map(|idx| idx as usize == col_idx)
+                                                                  .unwrap_or(false);
+                            let (r, g, b, a) = if is_transparent {
+                                (0, 0, 0, 0)
+                            } else {
+                                let col_idx = col_idx as usize;
+                                let r = color_map[col_idx * 3 + 0];
+                                let g = color_map[col_idx * 3 + 1];
+                                let b = color_map[col_idx * 3 + 2];
+                                (r, g, b, 0xFF)
+                            };
+
+                            let mut buf = Vec::with_capacity(num_bytes);
+                            while buf.len() < num_bytes {
+                                buf.push(r);
+                                buf.push(g);
+                                buf.push(b);
+                                buf.push(a);
+                            }
+                            buf
+                            */
+                        }
+                        DISPOSAL_PREVIOUS => {
+                            let num_frames = self.frames.len();
+                            if num_frames > 1 {
+                                self.frames[num_frames - 2].data.clone()
+                            } else {
+                                vec![0; num_bytes]
+                            }
+                        }
+                        _ => {
+                            return Err(Error::new(InvalidInput, "unsupported disposal method"));
+                        }
+                    };
+
+                    // ~~~~~~~~~~~~~~~~~~~ MAP INDICES TO COLORS ~~~~~~~~~~~~~~~~~~
+                    {
+                        let color_map = lct.unwrap_or_else(|| &**self.gct.as_ref().unwrap());
+                        for (pix_idx, col_idx) in indices.into_iter().enumerate() {
+                            let is_transparent = transparent_index.map(|idx| idx == col_idx)
+                                                                  .unwrap_or(false);
+
+                            // A transparent pixel "shows through" to whatever pixels
+                            // were drawn before. True transparency can only be set
+                            // in the disposal phase, as far as I can tell.
+                            if is_transparent { continue; }
+
+                            let col_idx = col_idx as usize;
+                            let r = color_map[col_idx * 3 + 0];
+                            let g = color_map[col_idx * 3 + 1];
+                            let b = color_map[col_idx * 3 + 2];
+                            let a = 0xFF;
+
+                            // we're blitting this frame on top of some perhaps larger
+                            // canvas. We need to adjust accordingly.
+                            let pix_idx = x + y * self.width +
+                                if width == self.width {
+                                    pix_idx
+                                } else {
+                                    let row = pix_idx / width;
+                                    let col = pix_idx % width;
+                                    row * self.width + col
+                                };
+                            pixels[pix_idx * BYTES_PER_COL + 0] = r;
+                            pixels[pix_idx * BYTES_PER_COL + 1] = g;
+                            pixels[pix_idx * BYTES_PER_COL + 2] = b;
+                            pixels[pix_idx * BYTES_PER_COL + 3] = a;
+                        }
+                    }
+                    // ~~~~~~~~~~~~~~~~~~ DONE!!! ~~~~~~~~~~~~~~~~~~~~
+
+                    let time = self.frames.last()
+                                          .map(|frame| frame.time + frame.duration)
+                                          .unwrap_or(0);
+                    self.frames.push(Frame {
+                        data: pixels,
+                        duration: frame_delay as u32,
+                        time: time,
+                    });
+                    return Ok(true)
+                }
+                _ => {
+                    return Err(Error::new(InvalidInput, "unknown block found"));
+                }
+            }
+        }
+    }
+}
+
+
+
+
+// ~~~~~~~~~~~~~~~~~ utilities for decoding LZW data ~~~~~~~~~~~~~~~~~~~
+
+const LZ_MAX_CODE: usize = 4095;
+const LZ_BITS: usize = 12;
+
+const NO_SUCH_CODE: usize = 4098;    // Impossible code, to signal empty.
+
+struct ParseState {
+    bits_per_pixel: usize,
+    clear_code: usize,
+    eof_code: usize,
+    running_code: usize,
+    running_bits: usize,
+    max_code_1: usize,
+    last_code: usize,
+    stack_ptr: usize,
+    current_shift_state: usize,
+    current_shift_dword: usize,
+    pixel_count: usize,
+    buf: [u8; 256], // [0] = len, [1] = cur_index
+    stack: [u8; LZ_MAX_CODE],
+    suffix: [u8; LZ_MAX_CODE + 1],
+    prefix: [usize; LZ_MAX_CODE + 1],
+}
+
+fn create_parse_state(code_size: u8, pixel_count: usize) -> ParseState {
+    let bits_per_pixel = code_size as usize;
+    let clear_code = 1 << bits_per_pixel;
+
+    ParseState {
+        buf: [0; 256], // giflib only inits the first byte to 0
+        bits_per_pixel: bits_per_pixel,
+        clear_code: clear_code,
+        eof_code: clear_code + 1,
+        running_code: clear_code + 2,
+        running_bits: bits_per_pixel + 1,
+        max_code_1: 1 << (bits_per_pixel + 1),
+        stack_ptr: 0,
+        last_code: NO_SUCH_CODE,
+        current_shift_state: 0,
+        current_shift_dword: 0,
+        prefix: [NO_SUCH_CODE; LZ_MAX_CODE + 1],
+        suffix: [0; LZ_MAX_CODE + 1],
+        stack: [0; LZ_MAX_CODE],
+        pixel_count: pixel_count,
+    }
+}
+
+fn get_indices<R: Read>(state: &mut ParseState, indices: &mut[u8], index_count: usize, data: &mut R)
+        -> IoResult<()> {
+    state.pixel_count -= index_count;
+    if state.pixel_count > 0xffff0000 {
+        return Err(Error::new(InvalidInput, "Gif has too much pixel data"));
     }
 
-    #[repr(C)]
-    #[allow(missing_copy_implementations)]
-    pub struct ColorMapObject {
-        pub ColorCount: c_int,
-        pub BitsPerPixel: c_int,
-        pub SortFlag: bool,
-        pub Colors: *mut GifColorType,
+    try!(decompress_indices(state, indices, index_count, data));
+
+    if state.pixel_count == 0 {
+        // There might be some more data hanging around. Finish walking through
+        // the data section.
+        try!(skip_blocks(data));
     }
 
-    #[repr(C)]
-    #[allow(missing_copy_implementations)]
-    pub struct GifColorType {
-        pub Red: GifByteType,
-        pub Green: GifByteType,
-        pub Blue: GifByteType,
+    Ok(())
+}
+
+fn decompress_indices<R: Read>(state: &mut ParseState, indices: &mut[u8], index_count: usize, data: &mut R)
+        -> IoResult<()> {
+    let mut i = 0;
+    let mut current_prefix; // This is uninit in dgif
+    let &mut ParseState {
+        mut stack_ptr,
+        eof_code,
+        clear_code,
+        mut last_code,
+        ..
+    } = state;
+
+    if stack_ptr > LZ_MAX_CODE { return Err(malformed()); }
+    while stack_ptr != 0 && i < index_count {
+        stack_ptr -= 1;
+        indices[i] = state.stack[stack_ptr];
+        i += 1;
     }
 
-    #[repr(C)]
-    #[allow(missing_copy_implementations)]
-    pub struct ExtensionBlock {
-        pub ByteCount: c_int,
-        pub Bytes: *mut GifByteType,
-        pub Function: c_int,
+    while i < index_count {
+        let current_code = try!(decompress_input(state, data));
+
+        let &mut ParseState {
+            ref mut prefix,
+            ref mut suffix,
+            ref mut stack,
+            ..
+        } = state;
+
+        if current_code == eof_code { return Err(eof()); }
+
+        if current_code == clear_code {
+            // Reset all the sweet codez we learned
+            for j in 0..LZ_MAX_CODE {
+                prefix[j] = NO_SUCH_CODE;
+            }
+
+            state.running_code = state.eof_code + 1;
+            state.running_bits = state.bits_per_pixel + 1;
+            state.max_code_1 = 1 << state.running_bits;
+            state.last_code = NO_SUCH_CODE;
+            last_code = state.last_code;
+        } else {
+            // Regular code
+            if current_code < clear_code {
+                // single index code, direct mapping to a colour index
+                indices[i] = current_code as u8;
+                i += 1;
+            } else {
+                // MULTI-CODE MULTI-CODE ENGAGE -- DASH DASH DASH!!!!
+
+                if prefix[current_code] == NO_SUCH_CODE {
+                    current_prefix = last_code;
+
+                    let code = if current_code == state.running_code - 2 {
+                        last_code
+                    } else {
+                        current_code
+                    };
+
+                    let prefix_char = get_prefix_char(&*prefix, code, clear_code);
+                    stack[stack_ptr] = prefix_char;
+                    suffix[state.running_code - 2] = prefix_char;
+                    stack_ptr += 1;
+                } else {
+                    current_prefix = current_code;
+                }
+
+                while stack_ptr < LZ_MAX_CODE
+                        && current_prefix > clear_code
+                        && current_prefix <= LZ_MAX_CODE {
+
+                    stack[stack_ptr] = suffix[current_prefix];
+                    stack_ptr += 1;
+                    current_prefix = prefix[current_prefix];
+                }
+
+                if stack_ptr >= LZ_MAX_CODE || current_prefix > LZ_MAX_CODE {
+                    return Err(malformed());
+                }
+
+                stack[stack_ptr] = current_prefix as u8;
+                stack_ptr += 1;
+
+                while stack_ptr != 0 && i < index_count {
+                    stack_ptr -= 1;
+                    indices[i] = stack[stack_ptr];
+                    i += 1;
+                }
+
+            }
+
+            if last_code != NO_SUCH_CODE && prefix[state.running_code - 2] == NO_SUCH_CODE {
+                prefix[state.running_code - 2] = last_code;
+
+                let code = if current_code == state.running_code - 2 {
+                    last_code
+                } else {
+                    current_code
+                };
+
+                suffix[state.running_code - 2] = get_prefix_char(&*prefix, code, clear_code);
+            }
+
+            last_code = current_code;
+        }
     }
 
-    #[repr(C)]
-    #[allow(missing_copy_implementations)]
-    pub struct GraphicsControlBlock {
-        pub DisposalMode: c_int,
-        pub UserInputFlag: bool,
-        pub DelayTime: c_int,
-        pub TransparentColor: c_int,
+    state.last_code = last_code;
+    state.stack_ptr = stack_ptr;
+
+    Ok(())
+}
+
+// Prefix is a virtual linked list or something.
+fn get_prefix_char(prefix: &[usize], mut code: usize, clear_code: usize) -> u8 {
+    let mut i = 0;
+
+    loop {
+        if code <= clear_code { break; }
+        i += 1;
+        if i > LZ_MAX_CODE { break; }
+        if code > LZ_MAX_CODE { return NO_SUCH_CODE as u8; }
+        code = prefix[code];
     }
 
-    #[link(name = "gif")]
-    extern {
-        pub fn DGifOpenFileName(GifFileType: *const c_char, Error: *mut c_int) -> *mut GifFileType;
-        pub fn DGifOpenFileHandle(GifFileHandle: c_int, Error: *mut c_int) -> *mut GifFileType;
-        pub fn DGifOpen(userPtr: *mut c_void, readFunc: InputFunc, Error: *mut c_int)
-                        -> *mut GifFileType;
-        pub fn DGifSlurp(GifFile: *mut GifFileType) -> c_int;
-        pub fn DGifCloseFile(GifFile: *mut GifFileType, ErrorCode: *mut c_int) -> c_int;
-        pub fn DGifGetRecordType(GifFile: *mut GifFileType, GifType: *mut GifRecordType) -> c_int;
-        pub fn DGifGetImageDesc(GifFile: *mut GifFileType) -> c_int;
-        pub fn DGifGetLine(GifFile: *mut GifFileType,
-                           GifLine: *mut GifPixelType,
-                           GifLineLen: c_int)
-                           -> c_int;
-        pub fn DGifGetExtension(GifFile: *mut GifFileType,
-                                GifExtCode: *mut c_int,
-                                GifExtension: *mut *mut GifByteType)
-                                -> c_int;
-        pub fn DGifGetExtensionNext(GifFile: *mut GifFileType, GifExtension: *mut *mut GifByteType)
-                                    -> c_int;
-        pub fn GifAddExtensionBlock(ExtensionBlock_Count: *mut c_int,
-                                    ExtensionBlocks: *mut *mut ExtensionBlock,
-                                    Function: c_int,
-                                    Len: c_uint,
-                                    ExtData: *mut c_uchar)
-                                    -> c_int;
-        pub fn DGifExtensionToGCB(GifExtensionLength: size_t,
-                                  GifExtension: *const GifByteType,
-                                  GCB: *mut GraphicsControlBlock)
-                                  -> c_int;
+    code as u8
+}
+
+fn decompress_input<R: Read>(state: &mut ParseState, src: &mut R) -> IoResult<usize> {
+    let code_masks: [usize; 13] = [
+        0x0000, 0x0001, 0x0003, 0x0007,
+        0x000f, 0x001f, 0x003f, 0x007f,
+        0x00ff, 0x01ff, 0x03ff, 0x07ff,
+        0x0fff
+    ];
+
+    if state.running_bits > LZ_BITS { return Err(malformed()) }
+
+    while state.current_shift_state < state.running_bits {
+        // Get the next byte, which is either in this block or the next one
+        let next_byte = if state.buf[0] == 0 {
+
+            // This block is done, get the next one
+            let len = try!(read_block(src, &mut state.buf[1..]));
+            state.buf[0] = len as u8;
+
+            // Reaching the end is not expected here
+            if len == 0 { return Err(eof()); }
+
+            let next_byte = state.buf[1];
+            state.buf[1] = 2;
+            state.buf[0] -= 1;
+            next_byte
+        } else {
+            // Still got bytes in this block
+            let next_byte = state.buf[state.buf[1] as usize];
+            // this overflows when the line is 255 bytes long, and that's ok
+            state.buf[1] = state.buf[1].wrapping_add(1);
+            state.buf[0] -= 1;
+            next_byte
+        };
+
+        state.current_shift_dword |= (next_byte as usize) << state.current_shift_state;
+        state.current_shift_state += 8;
     }
+
+    let code = state.current_shift_dword & code_masks[state.running_bits];
+    state.current_shift_dword >>= state.running_bits;
+    state.current_shift_state -= state.running_bits;
+
+    if state.running_code < LZ_MAX_CODE + 2 {
+        state.running_code += 1;
+        if state.running_code > state.max_code_1 && state.running_bits < LZ_BITS {
+            state.max_code_1 <<= 1;
+            state.running_bits += 1;
+        }
+    }
+
+    Ok(code)
+}
+
+
+// ~~~~~~~~~~~~ Streaming reading utils ~~~~~~~~~~~~~~~
+
+fn read_byte<R: Read>(reader: &mut R) -> IoResult<u8> {
+    let mut buf = [0];
+    let bytes_read = try!(reader.read(&mut buf));
+    if bytes_read != 1 { return Err(eof()); }
+    Ok(buf[0])
+}
+
+fn read_to_full<R: Read>(reader: &mut R, buf: &mut [u8]) -> IoResult<()> {
+    let mut read = 0;
+    loop {
+        if read == buf.len() { return Ok(()) }
+
+        let bytes = try!(reader.read(&mut buf[read..]));
+
+        if bytes == 0 { return Err(eof()) }
+
+        read += bytes;
+    }
+}
+
+/// A few places where you need to skip through some variable length region
+/// without evaluating the results. This does that.
+fn skip_blocks<R: Read>(reader: &mut R) -> IoResult<()> {
+    let mut black_hole = [0; 255];
+    loop {
+        let len = try!(read_block(reader, &mut black_hole));
+        if len == 0 { return Ok(()) }
+    }
+}
+
+/// There are several variable length encoded regions in a GIF,
+/// that look like [len, ..len]. This is a convenience for grabbing the next
+/// block. Returns `len`.
+fn read_block<R: Read>(reader: &mut R, buf: &mut [u8]) -> IoResult<usize> {
+    debug_assert!(buf.len() >= 255);
+    let len = try!(read_byte(reader)) as usize;
+    if len == 0 { return Ok(0) } // read_to_full will probably freak out
+    try!(read_to_full(reader, &mut buf[..len]));
+    Ok(len)
+}
+
+fn le_u16(first: u8, second: u8) -> u16 {
+    ((second as u16) << 8) | (first as u16)
+}
+
+fn malformed() -> Error {
+    Error::new(InvalidInput, "Malformed GIF")
+}
+
+fn eof() -> Error {
+    Error::new(InvalidInput, "Unexpected end of GIF")
 }
 

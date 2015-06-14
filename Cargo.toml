@@ -55,3 +55,7 @@ default = []
 
 ffmpeg = []
 
+[[test]]
+name = "reftest"
+path = "tests/reftest.rs"
+harness = false

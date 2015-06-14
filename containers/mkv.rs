@@ -683,21 +683,21 @@ impl<'a> container::Track<'a> for TrackImpl<'a> {
                     track: track,
                     segment: segment,
                     reader: reader,
-                }) as Box<container::VideoTrack<'a> + 'a>)
+                }))
             }
             TrackType::Audio(track) => {
                 container::TrackType::Audio(Box::new(AudioTrackImpl {
                     track: track,
                     segment: segment,
                     reader: reader,
-                }) as Box<container::AudioTrack<'a> + 'a>)
+                }))
             }
             TrackType::Other(track) => {
                 container::TrackType::Other(Box::new(TrackImpl {
                     track: track,
                     segment: segment,
                     reader: reader,
-                }) as Box<container::Track<'a> + 'a>)
+                }))
             }
         }
     }
@@ -731,11 +731,10 @@ struct VideoTrackImpl<'a> {
 
 impl<'a> container::Track<'a> for VideoTrackImpl<'a> {
     fn track_type(self: Box<Self>) -> container::TrackType<'a> {
-        container::TrackType::Video(self as Box<container::VideoTrack<'a> + 'a>)
+        container::TrackType::Video(self)
     }
 
     fn is_video(&self) -> bool { true }
-    fn is_audio(&self) -> bool { false }
 
     fn cluster_count(&self) -> Option<c_int> {
         Some(self.segment.count() as c_int)
@@ -787,10 +786,9 @@ struct AudioTrackImpl<'a> {
 
 impl<'a> container::Track<'a> for AudioTrackImpl<'a> {
     fn track_type(self: Box<Self>) -> container::TrackType<'a> {
-        container::TrackType::Audio(self as Box<container::AudioTrack<'a> + 'a>)
+        container::TrackType::Audio(self)
     }
 
-    fn is_video(&self) -> bool { false }
     fn is_audio(&self) -> bool { true }
 
     fn cluster_count(&self) -> Option<c_int> {

@@ -444,14 +444,14 @@ impl<'a> container::Track<'a> for TrackImpl<'a> {
             container::TrackType::Video(Box::new(VideoTrackImpl {
                 id: self.id,
                 handle: self.handle,
-            }) as Box<container::VideoTrack + 'a>)
+            }))
         } else if track_type == ffi::MP4_AUDIO_TRACK_TYPE {
             container::TrackType::Audio(Box::new(AudioTrackImpl {
                 id: self.id,
                 handle: self.handle,
-            }) as Box<container::AudioTrack + 'a>)
+            }))
         } else {
-            container::TrackType::Other(self as Box<container::Track<'a> + 'a>)
+            container::TrackType::Other(self)
         }
     }
 
@@ -491,11 +491,10 @@ pub struct VideoTrackImpl<'a> {
 
 impl<'a> container::Track<'a> for VideoTrackImpl<'a> {
     fn track_type(self: Box<Self>) -> container::TrackType<'a> {
-        container::TrackType::Video(Box::new((*self).clone()) as Box<container::VideoTrack + 'a>)
+        container::TrackType::Video(self)
     }
 
     fn is_video(&self) -> bool { true }
-    fn is_audio(&self) -> bool { false }
 
     fn cluster_count(&self) -> Option<c_int> {
         Some(1)
@@ -558,11 +557,10 @@ pub struct AudioTrackImpl<'a> {
 
 impl<'a> container::Track<'a> for AudioTrackImpl<'a> {
     fn track_type(self: Box<Self>) -> container::TrackType<'a> {
-        container::TrackType::Audio(Box::new((*self).clone()) as Box<container::AudioTrack<'a> + 'a>)
+        container::TrackType::Audio(self)
     }
 
-    fn is_video(&self) -> bool { false }
-    fn is_audio(&self) -> bool { false }
+    fn is_audio(&self) -> bool { true }
 
     fn cluster_count(&self) -> Option<c_int> {
         Some(1)
