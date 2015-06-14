@@ -10,6 +10,112 @@
 //! (Animated) GIF support.
 //!
 //! GIF is treated as both a container and a video codec.
+//!
+//! # THE GIF STANDARD:
+//!
+//! See http://giflib.sourceforge.net/whatsinagif/ for detailed docs.
+//!
+//! Gif is full of tons of junk that we don't really care about, so here's a rough sketch of the
+//! spec and features we care about:
+//!
+//! **GIF is a Little Endian format**
+//!
+//! For brevity and easy search:
+//! * GCT = Global Colour Table
+//! * LCT = Local Colour Table
+//!
+//! ## Image Prelude (only once, at the start of the file)
+//!
+//! * Header - 6 bytes
+//!     * "GIF87a" or "GIF89a"
+//! * Logical Screen Descriptor - 7 bytes
+//!     * bytes 0-3: (width: u16, height: u16)
+//!     * byte 4:    GCT MEGA FIELD
+//!         * bit 0:    GCT flag (whether there will be one)
+//!         * bits 1-3: GCT resolution -- ?????? LEGACY GARBAGE ?????
+//!         * bit 4:    LEGACY GARBAGE about sorting
+//!         * bits 5-7: GCT size -- k -> 2^(k + 1) entries in the GCT
+//!     * byte 5:    GCT background colour index
+//!     * byte 6:    LEGACY GARBAGE about non-square pixels
+//! * If the GCT flag was set, the GCT follows (otherwise just go to the next section)
+//!     * Array of RGB triples (1 byte per channel = 3 bytes per colour)
+//!     * GCT size = k -> 3*2^(k + 1) bytes
+//!
+//!
+//! ## Image body (this loops forever)
+//!
+//!     * First byte: what's the next thing?
+//!         * '3B': End of file -- We're done!!!!
+//!         * '21': An Extension, type determined by the next byte
+//!             * '01': Plain Text Extension - variable length LEGACY GARBAGE
+//!                 * read the byte
+//!                     * if it's 0 we're done
+//!                     * otherwise cur += data[cur] + 1; loop
+//!             * 'FE': Comment Extension - variable length LEGACY GARBAGE
+//!                 * read the byte
+//!                     * if it's 0 we're done
+//!                     * otherwise cur += data[cur] + 1; loop
+//!             * 'FF': Application Extension (looping!) - 17 bytes
+//!                 * byte 0:      'OB'
+//!                 * bytes 1-11:  "NETSCAPE2.0" (yes, really!)
+//!                 * byte 12:     '03'
+//!                 * byte 13:     '01'
+//!                 * bytes 14-15: u16 number of times to play, 0 = "forever"
+//!                 * byte 16:     '00'
+//!             * 'F9': Graphics Control Extension (transparency and frame length!) - 6 bytes
+//!                 * byte 0:    '04'
+//!                 * byte 1:    RENDERING MEGA FIELD
+//!                     * bits 0-2: reserved LEGACY GARBAGE
+//!                     * bits 3-5: disposal method
+//!                         * 0: unspecified (this image is not animated?)
+//!                         * 1: draw this frame on top of the current image
+//!                         * 2: clear image to background colour
+//!                         * 3: draw this frame on top of the previous image (does this happen?)
+//!                     * bit 6:    LEGACY GARBAGE about user input
+//!                     * bit 7:    transparent colour flag
+//!                 * bytes 2-3: u16 frame length in hundredths-of-a-second
+//!                 * byte 4:    transparent colour index
+//!                     * if transparent flag set, interpret this colour index as 100% transparent
+//!                     * note that this means "reuse the old pixel" if using disposal current/prev
+//!                 * byte 5: '00'
+//!         * '2C': An Actual Image:
+//!             * image descriptor info - 9 bytes
+//!                 * bytes 0-7: (x: u16, y: u16, width: u16, height: u16)
+//!                 * byte 8: LCT MEGA FIELD
+//!                     * bit 0:    LCT flag (whether there will be one)
+//!                     * bit 1:    Interlace flag (whether the image data is interlaced)
+//!                     * bits 2-4: LEGACY GARBAGE about sorting/reserved
+//!                     * bits 5-7: LCT size -- k -> 2^(k + 1) entries in the LCT
+//!             * If the LCT flag was set, the LCT follows (otherwise just go to the next section)
+//!                 * Same format as GCT; see above
+//!             * Image Data: this is a variable-length pseudo-LZW encoding
+//!                 * byte 0:   minimum LZW code size (used in decompression)
+//!                 * blocks of LZW data until you hit one that has size 0
+//!                     * byte 0: block size in bytes (not including this one!)
+//!                     * bytes 1-n: LZW'd data
+//!
+//!
+//! ## Decoding Image Data
+//!
+//! Image data is just a series of one-bytes indices into the local or global colour table
+//! (use global if local flag wasn't set -- they can't both not be set). The indices are
+//! the pixels in "english reading order": left to right, then top to bottom.
+//!
+//! Unfortunately for us, this data is encoded in a pseudo-LZW-compressed format. How to walk
+//! through that format is explained above. Decoding it is super complicated though, and I really
+//! don't understand it. This is the one place I basically deferred to GIFLIB's implementation
+//! with occassional cleanups.
+//!
+//! A very minimal GIF
+//! Header:      47 49 46 38 39 61                           - "GIF89a"
+//! LSD:         0A 00 0A 00   91   00   00                  - 91 = 1 001 0 001 - GCT w/ 4 colours
+//! GCT:         FF FF FF   FF 00 00   00 00 FF   00 00 00   - white, red, blue, black
+//! GraphExt:    21 F9   04   00   00 00   00   00           - no animation or transparency
+//! Image:       2C
+//!      desc:   00 00   00 00   0A 00   0A 00   00          - 10x10 img, no LCT, no interlace
+//!      data:   02   16   8C 2D 99 87 2A 1C DC 33 A0 02 75 EC 95 FA A8 DE 60 8C 04 91 4C 01   00
+//!      data block (thing that starts with 8C) in binary:
+//! EOF:         3B
 
 #![allow(non_snake_case)]
 
