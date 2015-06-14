@@ -430,12 +430,12 @@ impl Gif {
 
                     /* For debugging
                     println!("");
-                    println!("starting frame decoding: {}", frames.len());
+                    println!("starting frame decoding: {}", self.frames.len());
                     println!("x: {}, y: {}, w: {}, h: {}", x, y, width, height);
                     println!("trans: {:?}, interlace: {}", transparent_index, interlace);
                     println!("delay: {}, disposal: {}, iters: {:?}",
-                             frame_delay, disposal_method, num_iterations);
-                    println!("lct: {}, gct: {}", lct_flag, gct_flag);
+                             frame_delay, disposal_method, self.num_iterations);
+                    println!("lct: {}, gct: {}", lct_flag, self.gct.is_some());
                     */
 
                     // ~~~~~~~~~~~~~~ DECODE THE INDICES ~~~~~~~~~~~~~~~~
@@ -462,14 +462,15 @@ impl Gif {
                     let num_bytes = self.width * self.height * BYTES_PER_COL;
 
                     let mut pixels = match disposal_method {
-                        DISPOSAL_UNSPECIFIED => {
-                            vec![0; num_bytes]
-                        }
-                        DISPOSAL_CURRENT => {
+                        // Firefox says unspecified == current
+                        DISPOSAL_UNSPECIFIED | DISPOSAL_CURRENT => {
                             self.frames.last().map(|frame| frame.data.clone())
                                          .unwrap_or_else(|| vec![0; num_bytes])
                         }
                         DISPOSAL_BG => {
+                            vec![0; num_bytes]
+                            /*
+                            println!("BG disposal {}", self.gct_bg);
                             let col_idx = self.gct_bg as usize;
                             let color_map = self.gct.as_ref().unwrap();
                             let is_transparent = transparent_index.map(|idx| idx as usize == col_idx)
@@ -492,6 +493,7 @@ impl Gif {
                                 buf.push(a);
                             }
                             buf
+                            */
                         }
                         DISPOSAL_PREVIOUS => {
                             let num_frames = self.frames.len();
