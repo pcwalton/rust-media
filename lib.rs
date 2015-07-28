@@ -7,7 +7,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#![feature(alloc, collections, core, libc, box_patterns, unsafe_no_drop_flag, duration)]
+#![feature(alloc, collections, core, libc, box_patterns, unsafe_no_drop_flag, duration, slice_bytes, iter_cmp, vec_resize, vec_push_all)]
 
 extern crate alloc;
 extern crate libc;

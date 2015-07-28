@@ -7,7 +7,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#![feature(collections, libc, rustc_private, thread_sleep, duration)]
+#![feature(collections, libc, rustc_private, thread_sleep, duration, vec_resize)]
 
 extern crate clock_ticks;
 extern crate libc;
@@ -24,7 +24,7 @@ use media::playback::Player;
 use media::videodecoder::{DecodedVideoFrame, VideoDecoder};
 use sdl2::audio::{AudioCallback, AudioDevice, AudioSpecDesired};
 use sdl2::event::{Event, WindowEventId};
-use sdl2::keycode::KeyCode;
+use sdl2::keyboard::Keycode;
 use sdl2::pixels::PixelFormatEnum;
 use sdl2::rect::Rect;
 use sdl2::render::{Renderer, RendererParent};
@@ -69,7 +69,7 @@ impl ExampleMediaPlayer {
                 Event::Quit {
                     ..
                 } | Event::KeyDown {
-                    keycode: KeyCode::Escape,
+                    keycode: Some(Keycode::Escape),
                     ..
                 } => {
                     return false
@@ -102,8 +102,8 @@ impl<'a> ExampleVideoRenderer<'a> {
                -> ExampleVideoRenderer<'b> {
         let texture = renderer.create_texture(video_format.sdl_pixel_format,
                                              TextureAccess::Streaming,
-                                             (video_format.sdl_width as i32,
-                                              video_height))
+                                             (video_format.sdl_width as u32,
+                                              video_height as u32))
                         .ok().expect("Could not create rendered texture");
         ExampleVideoRenderer {
             texture: texture,
@@ -111,24 +111,22 @@ impl<'a> ExampleVideoRenderer<'a> {
         }
     }
 
-    fn present(&mut self, 
-                image: Box<DecodedVideoFrame + 'static>, 
-                player: &mut Player, 
-                sdl_context: &sdl2::Sdl) {
+    fn present(&mut self,
+                image: Box<DecodedVideoFrame + 'static>,
+                player: &mut Player) {
 
         let video_track = player.video_track().unwrap();
 
         let rect = if let &RendererParent::Window(ref window) = self.renderer.get_parent() {
-            let (width, height) = window.properties_getters(&sdl_context.event_pump()).get_size();
-            Rect::new(0, 0, width, height)
+            let (width, height) = window.properties_getters().get_size();
+            Rect::new_unwrap(0, 0, width as u32, height as u32)
         } else {
-            panic!("Renderer parent wasn't a window!")
+            panic!("Renderer parent wasn't a window!");
         };
 
         self.upload(image, &*video_track);
-        let mut drawer = self.renderer.drawer();
-        drawer.copy(&self.texture, None, Some(rect));
-        drawer.present();
+        self.renderer.copy(&self.texture, None, Some(rect));
+        self.renderer.present();
     }
 
     fn upload(&mut self, image: Box<DecodedVideoFrame + 'static>, video_track: &VideoTrack) {
@@ -362,7 +360,7 @@ fn main() {
         };
 
         if let Some(ref mut video_renderer) = video_renderer {
-            video_renderer.present(frame.video_frame.unwrap(), &mut player, &sdl_context);
+            video_renderer.present(frame.video_frame.unwrap(), &mut player);
         }
         if let Some(ref mut audio_renderer) = audio_renderer {
             enqueue_audio_samples(audio_renderer, &frame.audio_samples.unwrap());

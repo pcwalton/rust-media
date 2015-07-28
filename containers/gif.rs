@@ -176,7 +176,7 @@ impl FileType {
     }
 
     /// A port of a section of `DGifSlurp`.
-    fn read_image(&mut self) -> Result<(),()> {
+    fn read_image(&self) -> Result<(),()> {
         unsafe {
             let saved_image = self.mut_saved_images().last_mut().unwrap();
             if !saved_image.RasterBits.is_null() {
@@ -256,7 +256,7 @@ impl FileType {
         }
     }
 
-    pub unsafe fn mut_saved_images<'a>(&'a mut self) -> &'a mut [SavedImage] {
+    pub unsafe fn mut_saved_images<'a>(&'a self) -> &'a mut [SavedImage] {
         slice::from_raw_parts_mut((*self.file).SavedImages, (*self.file).ImageCount as usize)
     }
 
