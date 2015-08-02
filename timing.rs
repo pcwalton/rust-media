@@ -8,7 +8,7 @@
 // except according to those terms.
 
 use std::ops::{Add, Sub};
-use std::time::duration::Duration;
+use time::Duration;
 
 /// A timestamp relative to the beginning of playback. `ticks / ticks_per_second` represents the
 /// number of seconds. Use `.duration()` to convert to a Rust duration.

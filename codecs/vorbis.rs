@@ -12,6 +12,7 @@ use codecs::aac::AacHeaders;
 use containers::ogg::Packet;
 
 use libc::{c_float, c_int};
+use std::marker::PhantomData;
 use std::mem;
 use std::ptr;
 use std::slice;
@@ -87,7 +88,6 @@ pub struct VorbisDspState {
     info: VorbisInfo,
 }
 
-#[unsafe_destructor]
 impl Drop for VorbisDspState {
     fn drop(&mut self) {
         unsafe {
@@ -126,6 +126,7 @@ impl VorbisDspState {
                 (*self.state.vi).channels
             },
             samples: result,
+            marker: PhantomData,
         })
     }
 
@@ -146,7 +147,6 @@ pub struct VorbisBlock<'a> {
     state: &'a mut VorbisDspState,
 }
 
-#[unsafe_destructor]
 impl<'a> Drop for VorbisBlock<'a> {
     fn drop(&mut self) {
         unsafe {
@@ -201,6 +201,7 @@ pub struct Pcm<'a> {
     pcm: *mut *mut c_float,
     channels: c_int,
     samples: c_int,
+    marker: PhantomData<&'a ()>,
 }
 
 impl<'a> Pcm<'a> {
@@ -212,8 +213,8 @@ impl<'a> Pcm<'a> {
         unsafe {
             let buffer = (*self.pcm).offset(channel as isize);
             mem::transmute::<&[c_float],
-                             &'a [c_float]>(slice::from_raw_mut_buf(&buffer,
-                                                                    self.samples as usize))
+                             &'a [c_float]>(slice::from_raw_parts(buffer,
+                                                                  self.samples as usize))
         }
     }
 }
@@ -228,13 +229,13 @@ pub struct VorbisHeaders {
 
 impl VorbisHeaders {
     pub fn id<'a>(&'a self) -> &'a [u8] {
-        &self.data.as_slice()[0..self.id_size]
+        &self.data[0..self.id_size]
     }
     pub fn comment<'a>(&'a self) -> &'a [u8] {
-        &self.data.as_slice()[self.id_size..self.id_size + self.comment_size]
+        &self.data[self.id_size..self.id_size + self.comment_size]
     }
     pub fn setup<'a>(&'a self) -> &'a [u8] {
-        &self.data.as_slice()[self.id_size + self.comment_size..]
+        &self.data[self.id_size + self.comment_size..]
     }
 }
 

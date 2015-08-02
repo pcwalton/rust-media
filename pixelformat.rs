@@ -9,21 +9,22 @@
 
 //! Pixel format utility routines.
 
+use num::iter::range;
 use std::cmp;
-use std::old_io::BufWriter;
+use std::io::{Write, BufWriter};
 use std::slice::bytes;
 
 /// 8-bit Y plane followed by 8-bit 2x2-subsampled U and V planes.
-#[derive(Copy, Debug)]
+#[derive(Copy, Clone, Debug)]
 pub struct I420;
 
 /// 8-bit Y plane followed by an interleaved U/V plane containing 2x2 subsampled color difference
 /// samples.
-#[derive(Copy, Debug)]
+#[derive(Copy, Clone, Debug)]
 pub struct NV12;
 
 /// 8-bit indexes into a 24-bit color palette.
-#[derive(Copy, Debug)]
+#[derive(Copy, Clone, Debug)]
 pub struct Palette<'a> {
     pub palette: &'a [RgbColor],
 }
@@ -37,7 +38,7 @@ impl<'a> Palette<'a> {
 }
 
 /// 24-bit RGB.
-#[derive(Copy, Debug)]
+#[derive(Copy, Clone, Debug)]
 pub struct Rgb24;
 
 #[derive(Copy, Clone)]
@@ -94,7 +95,7 @@ impl ConvertPixelFormat<I420> for I420 {
                 let input_row = &y_input_pixels[input_index..input_index + minimum_stride];
                 let mut output_row =
                     &mut y_output_pixels[output_index..output_index + minimum_stride];
-                bytes::copy_memory(output_row, input_row);
+                bytes::copy_memory(input_row, output_row);
                 input_index += y_input_stride;
                 output_index += y_output_stride;
             }
@@ -119,7 +120,7 @@ impl ConvertPixelFormat<I420> for NV12 {
         for _ in range(0, height) {
             let input_row = &y_input_pixels[input_index..input_index + width];
             let mut output_row = &mut output_pixels[0][output_index..output_index + width];
-            bytes::copy_memory(output_row, input_row);
+            bytes::copy_memory(input_row, output_row);
             input_index += y_input_stride;
             output_index += output_strides[0];
         }
@@ -136,9 +137,9 @@ impl ConvertPixelFormat<I420> for NV12 {
         let (mut input_index, mut output_u_index, mut output_v_index) = (0, 0, 0);
         for _ in range(0, effective_height) {
             let input_row = &y_input_pixels[input_index..input_index + y_input_stride];
-            let mut output_u_row =
+            let output_u_row =
                 &mut y_output_u_pixels[output_u_index..output_u_index + width / 2];
-            let mut output_v_row =
+            let output_v_row =
                 &mut y_output_v_pixels[output_v_index..output_v_index + width / 2];
 
             let mut u_writer = BufWriter::new(output_u_row);
@@ -172,7 +173,7 @@ impl ConvertPixelFormat<Rgb24> for I420 {
         let (mut input_index, mut output_index) = (0, 0);
         for _ in range(0, height) {
             let input_row = &y_input_pixels[input_index..input_index + width * 3];
-            let mut output_row =
+            let output_row =
                 &mut output_pixels[0][output_index..output_index + output_strides[0]];
             let mut writer = BufWriter::new(output_row);
             for x in range(0, width) {
@@ -199,7 +200,7 @@ impl<'a> ConvertPixelFormat<Rgb24> for Palette<'a> {
         let (mut input_index, mut output_index) = (0, 0);
         for _ in range(0, height) {
             let input_row = &y_input_pixels[input_index..input_index + width];
-            let mut output_row = &mut output_pixels[0][output_index..output_index + width * 3];
+            let output_row = &mut output_pixels[0][output_index..output_index + width * 3];
             let mut writer = BufWriter::new(output_row);
             for x in range(0, width) {
                 let color = self.palette[input_row[x] as usize];
@@ -227,7 +228,7 @@ impl ConvertPixelFormat<Rgb24> for Rgb24 {
         for _ in range(0, height) {
             let input_row = &y_input_pixels[input_index..input_index + width * 3];
             let mut output_row = &mut output_pixels[0][output_index..output_index + width * 3];
-            bytes::copy_memory(output_row, input_row);
+            bytes::copy_memory(input_row, output_row);
             input_index += y_input_stride;
             output_index += output_strides[0];
         }
@@ -262,7 +263,7 @@ impl ConvertColorFormat<RgbColor> for YuvColor {
 /// Generic pixel format conversion with the pixel formats determined at runtime.
 ///
 /// We follow the same nomenclature as the document here: http://www.fourcc.org/yuv.php
-#[derive(Copy, Debug)]
+#[derive(Copy, Clone, Debug)]
 pub enum PixelFormat<'a> {
     I420,
     NV12,

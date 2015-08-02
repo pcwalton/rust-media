@@ -62,7 +62,7 @@ impl TCFType<ffi::CVBufferRef> for CVBuffer {
             buffer: buffer,
         }
     }
-    fn type_id(_: Option<CVBuffer>) -> CFTypeID {
+    fn type_id() -> CFTypeID {
         unsafe {
             ffi::CVBufferGetTypeID()
         }
@@ -127,7 +127,6 @@ pub struct CVBufferLockGuard<'a> {
     flags: CVPixelBufferLockFlags,
 }
 
-#[unsafe_destructor]
 impl<'a> Drop for CVBufferLockGuard<'a> {
     fn drop(&mut self) {
         unsafe {
@@ -144,8 +143,8 @@ impl<'a> CVBufferLockGuard<'a> {
         unsafe {
             let ptr = ffi::CVPixelBufferGetBaseAddressOfPlane(self.buffer.as_concrete_TypeRef(),
                                                               plane_index);
-            mem::transmute::<&mut [c_void],&'a mut [u8]>(slice::from_raw_mut_buf(&ptr,
-                                                                                 len as usize))
+            mem::transmute::<&mut [c_void],&'a mut [u8]>(slice::from_raw_parts_mut(ptr,
+                                                                                   len as usize))
         }
     }
 }

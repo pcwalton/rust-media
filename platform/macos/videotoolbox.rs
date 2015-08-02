@@ -71,7 +71,7 @@ impl TCFType<ffi::VTDecompressionSessionRef> for VTDecompressionSession {
             session: session,
         }
     }
-    fn type_id(_: Option<VTDecompressionSession>) -> CFTypeID {
+    fn type_id() -> CFTypeID {
         unsafe {
             ffi::VTDecompressionSessionGetTypeID()
         }
@@ -167,7 +167,7 @@ impl VideoDecoderImpl {
            -> Result<Box<videodecoder::VideoDecoder + 'static>,()> {
         // Create the video format description.
         let avcc = h264::create_avcc_chunk(headers);
-        let avcc = CFData::from_buffer(avcc.as_slice());
+        let avcc = CFData::from_buffer(&avcc);
         let key: CFString = FromStr::from_str("avcC").unwrap();
         let sample_description_extensions = CFDictionary::from_CFType_pairs(&[
             (key.as_CFType(), avcc.as_CFType())

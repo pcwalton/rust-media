@@ -7,10 +7,15 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#![feature(alloc, collections, core, io, libc, std_misc, unsafe_destructor)]
+#![feature(alloc, libc, unsafe_no_drop_flag, custom_derive, plugin)]
+#![feature(slice_bytes, iter_cmp, vec_resize, vec_push_all, heap_api)]
+#![plugin(num_macros)]
 
 extern crate alloc;
+extern crate byteorder;
 extern crate libc;
+extern crate num;
+extern crate time;
 
 #[cfg(target_os = "macos")]
 extern crate core_foundation;

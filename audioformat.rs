@@ -9,6 +9,8 @@
 
 //! Audio sample format utility routines.
 
+use num::iter::range;
+
 pub trait AudioFormat {
     type SampleType;
 }
@@ -24,7 +26,7 @@ pub trait ConvertAudioFormat<To:AudioFormat> : AudioFormat {
 }
 
 /// Planar 32-bit floating point.
-#[derive(Copy)]
+#[derive(Copy, Clone)]
 pub struct Float32Planar;
 
 impl AudioFormat for Float32Planar {
@@ -32,7 +34,7 @@ impl AudioFormat for Float32Planar {
 }
 
 /// Interleaved (non-planar) 32-bit floating point.
-#[derive(Copy)]
+#[derive(Copy, Clone)]
 pub struct Float32Interleaved;
 
 impl AudioFormat for Float32Interleaved {
