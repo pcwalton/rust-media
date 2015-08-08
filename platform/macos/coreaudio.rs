@@ -22,7 +22,7 @@ pub const kAudioFormatFlagIsPacked: u32 = (1 << 3);
 pub const kLinearPCMFormatFlagIsNonInterleaved: u32 = (1 << 5);
 
 #[repr(C)]
-#[derive(Copy, Debug)]
+#[derive(Copy, Clone, Debug)]
 pub struct AudioStreamBasicDescription {
     pub sample_rate: f64,
     pub format_id: u32,
@@ -36,7 +36,7 @@ pub struct AudioStreamBasicDescription {
 }
 
 #[repr(C)]
-#[derive(Copy)]
+#[derive(Copy, Clone)]
 pub struct AudioStreamPacketDescription {
     pub start_offset: i64,
     pub variable_frames_in_packet: u32,
@@ -72,9 +72,7 @@ impl AudioBuffer {
             data_byte_size: buffer.len() as u32,
             data: buffer.as_mut_ptr() as *mut c_void,
         };
-        unsafe {
-            mem::forget(buffer);
-        }
+        mem::forget(buffer);
         result
     }
 
@@ -85,8 +83,8 @@ impl AudioBuffer {
     pub fn data<'a>(&'a self) -> &'a [u8] {
         unsafe {
             mem::transmute::<&[c_void],
-                             &'a [u8]>(slice::from_raw_mut_buf(&self.data,
-                                                               self.data_byte_size as usize))
+                             &'a [u8]>(slice::from_raw_parts(self.data,
+                                                             self.data_byte_size as usize))
         }
     }
 }
@@ -105,7 +103,7 @@ impl AudioBufferList {
         let buffer_list;
         unsafe {
             buffer_list = heap::allocate(AudioBufferList::size(buffers.len() as u32),
-                                         mem::min_align_of::<AudioBufferList>())
+                                         mem::align_of::<AudioBufferList>())
                 as *mut AudioBufferList;
             (*buffer_list).number_buffers = buffers.len() as u32;
             for (i, buffer) in buffers.iter_mut().enumerate() {
@@ -121,8 +119,8 @@ impl AudioBufferList {
     pub fn buffers<'a>(&'a self) -> &'a [AudioBuffer] {
         unsafe {
             mem::transmute::<&[AudioBuffer],
-                             &'a [AudioBuffer]>(slice::from_raw_buf(&self.buffers.as_ptr(),
-                                                                    self.number_buffers as usize))
+                             &'a [AudioBuffer]>(slice::from_raw_parts(self.buffers.as_ptr(),
+                                                                      self.number_buffers as usize))
         }
     }
 
@@ -142,7 +140,7 @@ impl Drop for AudioBufferListRef {
         unsafe {
             heap::deallocate(self.buffer_list as *mut u8,
                              AudioBufferList::size((*self.buffer_list).number_buffers),
-                             mem::min_align_of::<AudioBufferList>())
+                             mem::align_of::<AudioBufferList>())
         }
     }
 }

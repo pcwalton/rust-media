@@ -95,30 +95,30 @@ pub trait TrackExt {
 impl<'a,'b> TrackExt for &'a (Track + 'b) {
     fn debug(&self) -> String {
         let mut result = format!("Track {}\n", self.number());
-        result.push_str(format!("  Type: {:?}\n", self.track_type()).as_slice());
+        result.push_str(&format!("  Type: {:?}\n", self.track_type()));
         if let Some(codec) = self.codec() {
-            if let Ok(codec) = str::from_utf8(codec.as_slice()) {
-                result.push_str(format!("  Codec: {}\n", codec).as_slice());
+            if let Ok(codec) = str::from_utf8(&codec) {
+                result.push_str(&format!("  Codec: {}\n", codec));
             }
         }
 
         match self.track_type() {
             TrackType::Video => {
                 let video_track = self.as_video_track().unwrap();
-                result.push_str(format!("  Width: {}\n", video_track.width()).as_slice());
-                result.push_str(format!("  Height: {}\n", video_track.height()).as_slice());
-                result.push_str(format!("  Frame Rate: {}\n",
-                                        video_track.frame_rate()).as_slice());
+                result.push_str(&format!("  Width: {}\n", video_track.width()));
+                result.push_str(&format!("  Height: {}\n", video_track.height()));
+                result.push_str(&format!("  Frame Rate: {}\n",
+                                         video_track.frame_rate()));
                 if let Some(cluster_count) = video_track.cluster_count() {
-                    result.push_str(format!("  Cluster Count: {}\n", cluster_count).as_slice());
+                    result.push_str(&format!("  Cluster Count: {}\n", cluster_count));
                 }
             }
             TrackType::Audio => {
                 let audio_track = self.as_audio_track().unwrap();
-                result.push_str(format!("  Channels: {}\n", audio_track.channels()).as_slice());
-                result.push_str(format!("  Rate: {}\n", audio_track.sampling_rate()).as_slice());
+                result.push_str(&format!("  Channels: {}\n", audio_track.channels()));
+                result.push_str(&format!("  Rate: {}\n", audio_track.sampling_rate()));
                 if let Some(cluster_count) = audio_track.cluster_count() {
-                    result.push_str(format!("  Cluster Count: {}\n", cluster_count).as_slice());
+                    result.push_str(&format!("  Cluster Count: {}\n", cluster_count));
                 }
             }
             _ => {}

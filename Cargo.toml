@@ -8,7 +8,7 @@ build = "build.rs"
 
 [lib]
 
-name = "rust-media"
+name = "rust_media"
 path = "lib.rs"
 
 [dependencies.libvpx-sys]
@@ -40,10 +40,15 @@ branch = "servo"
 
 git = "https://github.com/pcwalton/giflib"
 
-[target.x86_64-apple-darwin.dependencies.core_foundation]
+[target.x86_64-apple-darwin.dependencies.core-foundation]
 
 git = "https://github.com/servo/rust-core-foundation"
-rev = "da9a52655fce4727dcf261d6ed9a49eeddc7b131"
+
+[dependencies]
+num = "*"
+num-macros = "*"
+time = "*"
+byteorder = "*"
 
 [features]
 

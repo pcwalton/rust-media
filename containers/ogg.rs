@@ -13,6 +13,7 @@
 
 use libc::{c_char, c_int, c_long};
 use std::i32;
+use std::marker::PhantomData;
 use std::mem;
 use std::slice;
 
@@ -44,8 +45,8 @@ impl SyncState {
         unsafe {
             let ptr = ffi::ogg_sync_buffer(&mut self.state, size);
             assert!(!ptr.is_null());
-            mem::transmute::<&mut [c_char],&'a mut [u8]>(slice::from_raw_mut_buf(&ptr,
-                                                                                 size as usize))
+            mem::transmute::<&mut [c_char],&'a mut [u8]>(slice::from_raw_parts_mut(ptr,
+                                                                                   size as usize))
         }
     }
 
@@ -127,12 +128,14 @@ impl StreamState {
         }
         Packet {
             packet: packet,
+            marker: PhantomData,
         }
     }
 }
 
 pub struct Packet<'a> {
     packet: ffi::ogg_packet,
+    marker: PhantomData<&'a ()>,
 }
 
 impl<'a> Packet<'a> {
@@ -153,6 +156,7 @@ impl<'a> Packet<'a> {
                 granulepos: 0,
                 packetno: packet_number,
             },
+            marker: PhantomData,
         }
     }
 

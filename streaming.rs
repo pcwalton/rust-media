@@ -7,10 +7,10 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use std::old_io::fs::File;
-use std::old_io::{Reader, Seek};
+use std::fs::File;
+use std::io::{Read, Seek};
 
-pub trait StreamReader : Reader + Seek {
+pub trait StreamReader : Read + Seek {
     /// Returns the number of bytes available in this stream.
     fn available_size(&self) -> u64;
     /// Returns the total number of octets in this stream, including those that are not yet
@@ -25,7 +25,7 @@ impl StreamReader for File {
         self.total_size()
     }
     fn total_size(&self) -> u64 {
-        self.stat().unwrap().size
+        self.metadata().unwrap().len()
     }
 }
 

@@ -15,9 +15,10 @@ use timing::Timestamp;
 use videodecoder::{DecodedVideoFrame, RegisteredVideoDecoder, VideoDecoder};
 
 use libc::{c_int, c_long};
+use num::iter::range;
 use std::iter;
+use std::marker::PhantomData;
 use std::mem;
-use std::num::SignedInt;
 
 /// A simple video/audio player.
 pub struct Player<'a> {
@@ -36,13 +37,14 @@ pub struct Player<'a> {
     last_frame_presentation_time: Option<Timestamp>,
     /// The time at which the next frame is to be played.
     next_frame_presentation_time: Option<Timestamp>,
+    marker: PhantomData<&'a ()>,
 }
 
 impl<'a> Player<'a> {
     pub fn new<'b>(reader: Box<StreamReader>, mime_type: &str) -> Player<'b> {
-        let mut reader = RegisteredContainerReader::get(mime_type.as_slice()).unwrap()
-                                                                             .new(reader)
-                                                                             .unwrap();
+        let mut reader = RegisteredContainerReader::get(&mime_type).unwrap()
+                                                                   .new(reader)
+                                                                   .unwrap();
 
         let (video_player_info, audio_player_info) = {
             let (video_codec, audio_codec) =
@@ -83,6 +85,7 @@ impl<'a> Player<'a> {
             frame_delay: None,
             last_frame_presentation_time: None,
             next_frame_presentation_time: None,
+            marker: PhantomData,
         }
     }
 
@@ -191,7 +194,7 @@ impl<'a> Player<'a> {
                     };
                     decode_audio_frame(&mut *audio.codec,
                                        &*frame,
-                                       audio.samples.as_mut().unwrap().as_mut_slice());
+                                       &mut audio.samples.as_mut().unwrap());
                     audio.frame_index += 1;
 
                     // If there is a video track, we synchronize to it. Otherwise, read just one
@@ -309,7 +312,7 @@ fn read_track_metadata_and_initialize_codecs(reader: &mut ContainerReader)
                 let video_track = track.as_video_track().unwrap();
                 if let Some(codec) = video_track.codec() {
                     let headers = video_track.headers();
-                    video_codec = Some(RegisteredVideoDecoder::get(codec.as_slice()).unwrap().new(
+                    video_codec = Some(RegisteredVideoDecoder::get(&codec).unwrap().new(
                             &*headers,
                             video_track.width() as i32,
                             video_track.height() as i32).unwrap());
@@ -319,7 +322,7 @@ fn read_track_metadata_and_initialize_codecs(reader: &mut ContainerReader)
                 let audio_track = track.as_audio_track().unwrap();
                 if let Some(codec) = audio_track.codec() {
                     let headers = audio_track.headers();
-                    let info = RegisteredAudioDecoder::get(codec.as_slice()).unwrap().new(
+                    let info = RegisteredAudioDecoder::get(&codec).unwrap().new(
                             &*headers,
                             audio_track.sampling_rate(),
                             audio_track.channels());
@@ -337,18 +340,18 @@ fn decode_video_frame(codec: &mut VideoDecoder,
                       frames: &mut Vec<Box<DecodedVideoFrame + 'static>>) {
     let mut data = Vec::new();
     data.resize(frame.len() as usize, 0u8);
-    frame.read(data.as_mut_slice()).unwrap();
+    frame.read(&mut data).unwrap();
 
     let frame_presentation_time = frame.time() + frame.rendering_offset();
-    if let Ok(image) = codec.decode_frame(data.as_mut_slice(), &frame_presentation_time) {
+    if let Ok(image) = codec.decode_frame(&mut data, &frame_presentation_time) {
         frames.push(image)
     }
 }
 
 fn decode_audio_frame(codec: &mut AudioDecoder, frame: &Frame, samples: &mut [Vec<f32>]) {
     let mut data: Vec<u8> = iter::repeat(0).take(frame.len() as usize).collect();
-    frame.read(data.as_mut_slice()).unwrap();
-    if codec.decode(data.as_slice()).is_err() {
+    frame.read(&mut data).unwrap();
+    if codec.decode(&mut data).is_err() {
         return
     }
 
