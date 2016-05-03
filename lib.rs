@@ -8,7 +8,7 @@
 // except according to those terms.
 
 #![feature(alloc, libc, unsafe_no_drop_flag, custom_derive, plugin)]
-#![feature(slice_bytes, iter_cmp, vec_resize, vec_push_all, heap_api)]
+#![feature(heap_api)]
 #![plugin(num_macros)]
 
 extern crate alloc;

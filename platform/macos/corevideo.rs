@@ -175,7 +175,7 @@ impl videodecoder::DecodedVideoFrame for DecodedFrameImpl {
     fn stride(&self, index: usize) -> c_int {
         debug_assert!(self.buffer.is_planar());
         debug_assert!(self.buffer.plane_count() == 2);
-        self.buffer.bytes_per_row_of_plane(index as u64) as c_int
+        self.buffer.bytes_per_row_of_plane(index) as c_int
     }
 
     fn pixel_format<'a>(&'a self) -> PixelFormat<'a> {
@@ -200,7 +200,7 @@ struct DecodedVideoFrameLockGuardImpl<'a> {
 
 impl<'a> videodecoder::DecodedVideoFrameLockGuard for DecodedVideoFrameLockGuardImpl<'a> {
     fn pixels<'b>(&'b self, plane_index: usize) -> &'b [u8] {
-        self.guard.base_address_of_plane(plane_index as u64)
+        self.guard.base_address_of_plane(plane_index)
     }
 }
 
@@ -212,7 +212,7 @@ pub mod ffi {
     use libc::{c_void, size_t};
 
     #[repr(C)]
-    struct __CVBuffer;
+    pub struct __CVBuffer;
 
     pub type CVBufferRef = *mut __CVBuffer;
     pub type CVImageBufferRef = CVBufferRef;

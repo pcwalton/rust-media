@@ -219,7 +219,7 @@ impl CMBlockBuffer {
             ffi::CMBlockBufferReplaceDataBytes(source_bytes.as_ptr() as *const c_void,
                                                self.buffer,
                                                offset_into_destination,
-                                               source_bytes.len() as u64)
+                                               source_bytes.len())
         };
         if err == 0 {
             Ok(())
@@ -346,11 +346,11 @@ pub mod ffi {
     }
 
     #[repr(C)]
-    struct OpaqueCMBlockBuffer;
+    pub struct OpaqueCMBlockBuffer;
     #[repr(C)]
-    struct OpaqueCMFormatDescription;
+    pub struct OpaqueCMFormatDescription;
     #[repr(C)]
-    struct OpaqueCMSampleBuffer;
+    pub struct OpaqueCMSampleBuffer;
 
     pub type CMBlockBufferRef = *mut OpaqueCMBlockBuffer;
     pub type CMFormatDescriptionRef = *mut OpaqueCMFormatDescription;

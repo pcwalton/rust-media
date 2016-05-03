@@ -174,7 +174,7 @@ impl<'a> Player<'a> {
 
                 // Determine when the video frame is to be shown.
                 self.next_frame_presentation_time =
-                    match video.frames.iter().min_by(|frame| frame.presentation_time().ticks) {
+                    match video.frames.iter().min_by_key(|frame| frame.presentation_time().ticks) {
                         None => continue,
                         Some(frame) => Some(frame.presentation_time()),
                     };
@@ -252,7 +252,7 @@ impl<'a> Player<'a> {
                 match video.frames
                            .iter()
                            .enumerate()
-                           .min_by(|&(_, frame)| frame.presentation_time().ticks) {
+                           .min_by_key(|&(_, frame)| frame.presentation_time().ticks) {
                     None => return Err(()),
                     Some((index, _)) => Some(index),
                 }
@@ -358,7 +358,7 @@ fn decode_audio_frame(codec: &mut AudioDecoder, frame: &Frame, samples: &mut [Ve
     let sample_count = match codec.decoded_samples() {
         Ok(pcm_output) => {
             for channel in range(0, samples.len() as i32) {
-                samples[channel as usize].push_all(pcm_output.samples(channel).unwrap())
+                samples[channel as usize].extend_from_slice(pcm_output.samples(channel).unwrap())
             }
             pcm_output.samples(0).unwrap().len()
         }
