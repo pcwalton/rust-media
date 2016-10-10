@@ -12,7 +12,6 @@
 use num::iter::range;
 use std::cmp;
 use std::io::{Write, BufWriter};
-use std::slice::bytes;
 
 /// 8-bit Y plane followed by 8-bit 2x2-subsampled U and V planes.
 #[derive(Copy, Clone, Debug)]
@@ -95,7 +94,7 @@ impl ConvertPixelFormat<I420> for I420 {
                 let input_row = &y_input_pixels[input_index..input_index + minimum_stride];
                 let mut output_row =
                     &mut y_output_pixels[output_index..output_index + minimum_stride];
-                bytes::copy_memory(input_row, output_row);
+                output_row.copy_from_slice(input_row);
                 input_index += y_input_stride;
                 output_index += y_output_stride;
             }
@@ -120,7 +119,7 @@ impl ConvertPixelFormat<I420> for NV12 {
         for _ in range(0, height) {
             let input_row = &y_input_pixels[input_index..input_index + width];
             let mut output_row = &mut output_pixels[0][output_index..output_index + width];
-            bytes::copy_memory(input_row, output_row);
+            output_row.copy_from_slice(input_row);
             input_index += y_input_stride;
             output_index += output_strides[0];
         }
@@ -228,7 +227,7 @@ impl ConvertPixelFormat<Rgb24> for Rgb24 {
         for _ in range(0, height) {
             let input_row = &y_input_pixels[input_index..input_index + width * 3];
             let mut output_row = &mut output_pixels[0][output_index..output_index + width * 3];
-            bytes::copy_memory(input_row, output_row);
+            output_row.copy_from_slice(input_row);
             input_index += y_input_stride;
             output_index += output_strides[0];
         }

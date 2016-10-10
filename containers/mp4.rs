@@ -20,7 +20,6 @@ use std::ffi::{CString, CStr};
 use std::mem;
 use std::io::SeekFrom;
 use std::ptr;
-use std::slice::bytes;
 use std::slice;
 use std::str::{self, FromStr};
 
@@ -655,7 +654,7 @@ impl<'a> container::Frame for FrameImpl<'a> {
     }
 
     fn read(&self, buffer: &mut [u8]) -> Result<(),()> {
-        bytes::copy_memory(self.sample.bytes, buffer);
+        buffer.copy_from_slice(self.sample.bytes);
         Ok(())
     }
 
@@ -696,7 +695,7 @@ fn get_codec(handle: &Mp4FileHandle, id: ffi::MP4TrackId) -> Option<Vec<u8>> {
     ];
     for &(key, value) in TABLE.iter() {
         let mut path: Vec<u8> = b"mdia.minf.stbl.stsd.".iter().map(|x| *x).collect();
-        path.push_all(key);
+        path.extend_from_slice(key);
         if handle.have_track_atom(id, &path) {
             return Some(value.iter().map(|x| *x).collect())
         }

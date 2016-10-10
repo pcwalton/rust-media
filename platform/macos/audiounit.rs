@@ -483,9 +483,9 @@ pub mod ffi {
     use libc::c_void;
 
     #[repr(C)]
-    struct OpaqueAudioComponent;
+    pub struct OpaqueAudioComponent;
     #[repr(C)]
-    struct OpaqueAudioComponentInstance;
+    pub struct OpaqueAudioComponentInstance;
 
     pub type AudioCodec = AudioComponentInstance;
     pub type AudioComponent = *mut OpaqueAudioComponent;

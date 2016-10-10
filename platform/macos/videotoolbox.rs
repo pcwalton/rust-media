@@ -207,7 +207,7 @@ impl VideoDecoderImpl {
 impl videodecoder::VideoDecoder for VideoDecoderImpl {
     fn decode_frame(&self, data: &[u8], presentation_time: &Timestamp)
                     -> Result<Box<videodecoder::DecodedVideoFrame + 'static>,()> {
-        let block_buffer = match CMBlockBuffer::from_memory_block(data.len() as u64) {
+        let block_buffer = match CMBlockBuffer::from_memory_block(data.len()) {
             Ok(block_buffer) => block_buffer,
             Err(_) => return Err(()),
         };
@@ -287,7 +287,7 @@ pub mod ffi {
     use libc::c_void;
 
     #[repr(C)]
-    struct OpaqueVTDecompressionSession;
+    pub struct OpaqueVTDecompressionSession;
 
     pub type VTDecompressionSessionRef = *mut OpaqueVTDecompressionSession;
 

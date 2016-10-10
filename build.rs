@@ -15,5 +15,5 @@ fn main() {
         .status()
         .unwrap();
     assert!(result.success());
-    println!("cargo:rustc-flags=-L native={}", out_dir);
+    println!("cargo:rustc-link-search=native={}", out_dir);
 }

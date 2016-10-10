@@ -15,7 +15,7 @@ pub fn create_avcc_chunk(headers: &VideoHeaders) -> Vec<u8> {
     let pict_headers = headers.h264_pict_headers().unwrap();
 
     let mut avcc = Vec::new();
-    avcc.push_all(&[
+    avcc.extend_from_slice(&[
         0x01,
         seq_headers[0][1],
         seq_headers[0][2],
@@ -25,14 +25,14 @@ pub fn create_avcc_chunk(headers: &VideoHeaders) -> Vec<u8> {
     ]);
 
     for seq_header in seq_headers.iter() {
-        avcc.push_all(&[ (seq_header.len() >> 8) as u8, seq_header.len() as u8 ]);
-        avcc.push_all(&seq_header);
+        avcc.extend_from_slice(&[ (seq_header.len() >> 8) as u8, seq_header.len() as u8 ]);
+        avcc.extend_from_slice(&seq_header);
     }
 
     avcc.push(pict_headers.len() as u8);
     for pict_header in pict_headers.iter() {
-        avcc.push_all(&[ (pict_header.len() >> 8) as u8, pict_header.len() as u8 ]);
-        avcc.push_all(&pict_header);
+        avcc.extend_from_slice(&[ (pict_header.len() >> 8) as u8, pict_header.len() as u8 ]);
+        avcc.extend_from_slice(&pict_header);
     }
 
     avcc

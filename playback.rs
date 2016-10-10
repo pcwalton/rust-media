@@ -40,11 +40,22 @@ pub struct Player<'a> {
     marker: PhantomData<&'a ()>,
 }
 
+pub enum PlayerCreationError {
+    NoRegisteredContainer,
+    ContainerCreation,
+}
+
 impl<'a> Player<'a> {
-    pub fn new<'b>(reader: Box<StreamReader>, mime_type: &str) -> Player<'b> {
-        let mut reader = RegisteredContainerReader::get(&mime_type).unwrap()
-                                                                   .new(reader)
-                                                                   .unwrap();
+    pub fn new<'b>(reader: Box<StreamReader>, mime_type: &str)
+                   -> Result<Player<'b>, PlayerCreationError> {
+        let container_reader = match RegisteredContainerReader::get(&mime_type) {
+            Ok(container_reader) => container_reader,
+            Err(_) => return Err(PlayerCreationError::NoRegisteredContainer),
+        };
+        let mut reader = match container_reader.new(reader) {
+            Ok(reader) => reader,
+            Err(_) => return Err(PlayerCreationError::ContainerCreation),
+        };
 
         let (video_player_info, audio_player_info) = {
             let (video_codec, audio_codec) =
@@ -77,7 +88,7 @@ impl<'a> Player<'a> {
             }))
         };
 
-        Player {
+        Ok(Player {
             reader: reader,
             video: video_player_info,
             audio: audio_player_info,
@@ -86,7 +97,7 @@ impl<'a> Player<'a> {
             last_frame_presentation_time: None,
             next_frame_presentation_time: None,
             marker: PhantomData,
-        }
+        })
     }
 
     pub fn decode_frame(&mut self) -> Result<(),()> {
@@ -174,7 +185,7 @@ impl<'a> Player<'a> {
 
                 // Determine when the video frame is to be shown.
                 self.next_frame_presentation_time =
-                    match video.frames.iter().min_by(|frame| frame.presentation_time().ticks) {
+                    match video.frames.iter().min_by_key(|frame| frame.presentation_time().ticks) {
                         None => continue,
                         Some(frame) => Some(frame.presentation_time()),
                     };
@@ -252,7 +263,7 @@ impl<'a> Player<'a> {
                 match video.frames
                            .iter()
                            .enumerate()
-                           .min_by(|&(_, frame)| frame.presentation_time().ticks) {
+                           .min_by_key(|&(_, frame)| frame.presentation_time().ticks) {
                     None => return Err(()),
                     Some((index, _)) => Some(index),
                 }
@@ -358,7 +369,7 @@ fn decode_audio_frame(codec: &mut AudioDecoder, frame: &Frame, samples: &mut [Ve
     let sample_count = match codec.decoded_samples() {
         Ok(pcm_output) => {
             for channel in range(0, samples.len() as i32) {
-                samples[channel as usize].push_all(pcm_output.samples(channel).unwrap())
+                samples[channel as usize].extend_from_slice(pcm_output.samples(channel).unwrap())
             }
             pcm_output.samples(0).unwrap().len()
         }
