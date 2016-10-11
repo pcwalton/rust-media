@@ -21,6 +21,7 @@ use std::cell::RefCell;
 use std::ffi::CString;
 use std::i32;
 use std::mem;
+use std::marker::PhantomData;
 use std::ptr;
 use std::slice;
 
@@ -171,7 +172,7 @@ impl AvCodecContext {
     }
 
     pub fn get_double_opt(&self, name: &[u8]) -> Result<c_double,c_int> {
-        let name = CString::from_slice(name);
+        let name = unsafe { CString::from_vec_unchecked(name.into()) };
         let mut out_val = 0.0;
         let result = unsafe {
             ffi::av_opt_get_double(self.context.ptr() as *mut c_void,
@@ -187,7 +188,7 @@ impl AvCodecContext {
     }
 
     pub fn get_q_opt(&self, name: &[u8]) -> Result<ffi::AVRational,c_int> {
-        let name = CString::from_slice(name);
+        let name = unsafe { CString::from_vec_unchecked(name.into()) };
         let mut out_val = ffi::AVRational {
             num: 0,
             den: 0,
@@ -324,7 +325,7 @@ impl AvFrame {
     pub fn video_data<'a>(&'a self, plane_index: usize) -> &'a [u8] {
         let len = self.linesize(plane_index) * self.height();
         unsafe {
-            slice::from_raw_mut_buf(&(*self.frame).data[plane_index], len as usize)
+            slice::from_raw_parts(*&(*self.frame).data[plane_index], len as usize)
         }
     }
 
@@ -335,13 +336,14 @@ impl AvFrame {
                                        true).unwrap()
                                             .linesize;
         unsafe {
-            slice::from_raw_mut_buf(&(*self.frame).data[channel], len as usize)
+            slice::from_raw_parts(*&(*self.frame).data[channel], len as usize)
         }
     }
 }
 
 pub struct AvPacket<'a> {
     packet: ffi::EitherAVPacket,
+    phantom: PhantomData<&'a [u8]>,
 }
 
 impl<'a> AvPacket<'a> {
@@ -350,7 +352,7 @@ impl<'a> AvPacket<'a> {
         // Guard against segfaults per the documentation by setting the padding to zero.
         assert!(data.len() <= (i32::MAX as usize));
         assert!(data.len() >= FF_INPUT_BUFFER_PADDING_SIZE);
-        for i in range(data.len() - FF_INPUT_BUFFER_PADDING_SIZE, data.len()) {
+        for i in data.len() - FF_INPUT_BUFFER_PADDING_SIZE..data.len() {
             data[i] = 0
         }
 
@@ -377,6 +379,7 @@ impl<'a> AvPacket<'a> {
 
         AvPacket {
             packet: packet,
+            phantom: PhantomData,
         }
     }
 }
@@ -402,8 +405,8 @@ impl AvDictionary {
 
     pub fn set(&mut self, key: &str, value: &str) {
         unsafe {
-            let key = CString::from_slice(key.as_bytes());
-            let value = CString::from_slice(value.as_bytes());
+            let key = unsafe { CString::from_vec_unchecked(key.into()) };
+            let value = unsafe { CString::from_vec_unchecked(value.into()) };
             assert!(ffi::av_dict_set(&mut self.dictionary, key.as_ptr(), value.as_ptr(), 0) >= 0);
         }
     }
@@ -414,7 +417,7 @@ pub mod samples {
 
     use libc::c_int;
 
-    #[derive(Copy)]
+    #[derive(Clone, Copy)]
     pub struct BufferSizeResult {
         pub buffer_size: c_int,
         pub linesize: c_int,
@@ -472,13 +475,13 @@ impl videodecoder::VideoDecoder for VideoDecoderImpl {
     fn decode_frame(&self, data: &[u8], presentation_time: &Timestamp)
                     -> Result<Box<videodecoder::DecodedVideoFrame + 'static>,()> {
         let mut data: Vec<_> = data.iter().map(|x| *x).collect();
-        for _ in range(0, FF_INPUT_BUFFER_PADDING_SIZE) {
+        for _ in 0..FF_INPUT_BUFFER_PADDING_SIZE {
             data.push(0);
         }
 
         let mut packet = AvPacket::new(data.as_mut_slice());
-        let presentation_time = *presentation_time;
-        self.context.borrow_mut().set_get_buffer_callback(Box::new(|frame: &AvFrame| {
+        let presentation_time = presentation_time.clone();
+        self.context.borrow_mut().set_get_buffer_callback(Box::new(move |frame: &AvFrame| {
             frame.set_user_data(Box::new(presentation_time))
         }));
 
@@ -567,8 +570,8 @@ impl audiodecoder::AudioDecoderInfo for AudioDecoderInfoImpl {
         let codec = AvCodec::find_decoder(AV_CODEC_ID_AAC).unwrap();
         let context = AvCodecContext::new(&codec);
         let mut options = AvDictionary::new();
-        options.set("ac", self.channels.to_string().as_slice());
-        options.set("ar", self.sample_rate.to_string().as_slice());
+        options.set("ac", &self.channels.to_string());
+        options.set("ar", &self.sample_rate.to_string());
         options.set("request_sample_fmt", "fltp");
 
         let (result, _) = context.open(&codec, options);
@@ -589,7 +592,7 @@ impl audiodecoder::AudioDecoder for AudioDecoderImpl {
     fn decode(&mut self, data: &[u8]) -> Result<(),()> {
         let data_len = data.len();
         let mut data: Vec<_> = data.iter().map(|x| *x).collect();
-        for _ in range(0, FF_INPUT_BUFFER_PADDING_SIZE) {
+        for _ in 0..FF_INPUT_BUFFER_PADDING_SIZE {
             data.push(0);
         }
         let mut packet = AvPacket::new(data.as_mut_slice());
@@ -632,9 +635,8 @@ impl<'a> audiodecoder::DecodedAudioSamples for DecodedAudioSamplesImpl<'a> {
         let data = self.frame.audio_data(channel as usize, self.channels);
         unsafe {
             Some(mem::transmute::<&[f32],
-                                  &'b [f32]>(slice::from_raw_buf(&(data.as_ptr() as *const f32),
-                                                                 data.len() /
-                                                                    mem::size_of::<f32>())))
+                                  &'b [f32]>(slice::from_raw_parts(data.as_ptr() as *const f32,
+                                                                   data.len() / mem::size_of::<f32>())))
         }
     }
 }
@@ -1069,7 +1071,7 @@ pub mod ffi {
     }
 
     #[repr(C)]
-    #[derive(Copy, Debug)]
+    #[derive(Clone, Copy, Debug)]
     pub struct AVRational {
         pub num: c_int,
         pub den: c_int,

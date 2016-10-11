@@ -1,0 +1,6 @@
+# Rust related files
+/Cargo.lock
+target/
+
+# Editor temporary files
+*swp

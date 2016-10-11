@@ -7,7 +7,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#![feature(alloc, libc, unsafe_no_drop_flag, custom_derive, plugin)]
+#![feature(alloc, libc, custom_derive, plugin)]
 #![feature(heap_api)]
 #![plugin(num_macros)]
 

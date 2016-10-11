@@ -40,6 +40,7 @@ pub struct Player<'a> {
     marker: PhantomData<&'a ()>,
 }
 
+#[derive(Debug)]
 pub enum PlayerCreationError {
     NoRegisteredContainer,
     ContainerCreation,
@@ -245,7 +246,7 @@ impl<'a> Player<'a> {
     pub fn next_frame_presentation_time(&self) -> Option<Timestamp> {
         self.next_frame_presentation_time
     }
-    
+
     /// Retrieves the decoded frame data and advances to the next frame.
     pub fn advance(&mut self) -> Result<DecodedFrame,()> {
         // Determine the frame delay, if possible.

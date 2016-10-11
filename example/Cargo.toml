@@ -14,18 +14,7 @@ path = "example.rs"
 path = ".."
 features = ["ffmpeg"]
 
-[dependencies.clock_ticks]
-
-git = "https://github.com/tomaka/clock_ticks.git"
-
 [dependencies.sdl2]
 
 git = "https://github.com/AngryLawyer/rust-sdl2"
-rev = "a36627dff1069e5ca6098dd3a39fbd6039794097"
-
-[dependencies.sdl2-sys]
-
-git = "https://github.com/AngryLawyer/rust-sdl2"
-rev = "a36627dff1069e5ca6098dd3a39fbd6039794097"
-path = "sdl2-sys"
-
+rev = "62e08b3d4d0a043215165231cd093964260c4510"

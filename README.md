@@ -27,7 +27,7 @@ Other design goals include:
 * Scale up to hundreds of videos playing simultaneously.
 
   - Leave thread management up to the user of the library; don't require that playback happen on a dedicated thread.
-  
+
 * Use hardware decoders where available.
 
 * Be easy to use.
@@ -45,15 +45,11 @@ Other design goals include:
     $ cd example
     $ cargo build
 
-This will probably fail with an error about `#[derive(Copy)]` in `libc`. You will need to edit the `Cargo.lock` file and change references from `0.1.2` of `libc` to `0.1.1`. Then rerun `cargo build`:
-
-    $ cargo build
-
 ## Try out the example
 
 * Play a WebM video:
 
-        $ target/release/example ~/Movies/big_buck_bunny_480p.webm video/webm
+        $ cargo run ~/Movies/big_buck_bunny_480p.webm video/webm
 
 * Play a YouTube video:
 
