@@ -346,7 +346,10 @@ fn main() {
                                                 media_player.playback_start_ticks).duration();
         let target_time = media_player.playback_start_wallclock_time
             + target_time_since_playback_start.to_std().unwrap();
-        sleep(target_time - Instant::now());
+        let now = Instant::now();
+        if now < target_time {
+            sleep(target_time - now);
+        }
 
         let frame = match player.advance() {
             Ok(frame) => frame,
