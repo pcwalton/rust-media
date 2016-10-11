@@ -11,7 +11,7 @@
 
 extern crate clock_ticks;
 extern crate libc;
-extern crate "rust-media" as media;
+extern crate rust_media as media;
 extern crate sdl2;
 
 #[macro_use]
@@ -23,22 +23,23 @@ use media::container::{AudioTrack, ContainerReader, Frame, Track, VideoTrack};
 use media::pixelformat::{ConvertPixelFormat, PixelFormat, Rgb24};
 use media::playback::Player;
 use media::videodecoder::{DecodedVideoFrame, VideoDecoder};
-use sdl2::audio::{AudioCallback, AudioDevice, AudioSpecDesired};
+use sdl2::audio::{AudioCallback, AudioDevice, AudioSpecDesired, AudioSpec};
 use sdl2::event::{self, Event, WindowEventId};
-use sdl2::keycode::KeyCode;
+use sdl2::keyboard::Keycode;
 use sdl2::pixels::PixelFormatEnum;
 use sdl2::rect::Rect;
-use sdl2::render::{ACCELERATED, PRESENTVSYNC, RenderDriverIndex, Renderer, RendererParent};
+use sdl2::render::Renderer;
 use sdl2::render::{Texture, TextureAccess};
-use sdl2::video::{OPENGL, RESIZABLE, Window, WindowPos};
-use sdl2::{INIT_AUDIO, INIT_VIDEO, init};
+use sdl2::init;
+use sdl2::EventPump;
+use sdl2::AudioSubsystem;
 use std::cmp;
 use std::env;
 use std::mem;
-use std::old_io::fs::File;
-use std::old_io::timer;
+use std::fs::File;
+use std::thread::sleep;
 use std::slice;
-use std::time::duration::Duration;
+use std::time::Duration;
 
 struct ExampleMediaPlayer {
     /// A reference timestamp at which playback began.
@@ -62,18 +63,15 @@ impl ExampleMediaPlayer {
 
     /// Polls events so we can quit if the user wanted to. Returns true to continue or false to
     /// quit.
-    fn poll_events(&mut self, player: &mut Player) -> bool {
-        loop {
-            match event::poll_event() {
-                Event::None => break,
-                Event::Quit {
+    fn poll_events(&mut self, event_pump: &mut EventPump, player: &mut Player) -> bool {
+        for event in event_pump.poll_iter() {
+            use sdl2::event::Event;
+            match event {
+                Event::Quit {..} => return false,
+                Event::KeyDown {
+                    keycode: Some(Keycode::Escape),
                     ..
-                } | Event::KeyDown {
-                    keycode: KeyCode::Escape,
-                    ..
-                } => {
-                    return false
-                }
+                } => return false,
                 Event::Window {
                     win_event_id: WindowEventId::Resized,
                     ..
@@ -81,8 +79,8 @@ impl ExampleMediaPlayer {
                     if let Some(last_frame_time) = player.last_frame_presentation_time() {
                         self.resync(last_frame_time.ticks)
                     }
-                }
-                _ => {}
+                },
+                _ => ()
             }
         }
 
@@ -92,20 +90,21 @@ impl ExampleMediaPlayer {
 
 struct ExampleVideoRenderer<'a> {
     /// The SDL renderer.
-    renderer: &'a Renderer,
+    renderer: &'a mut Renderer<'static>,
     /// The YUV texture we're using.
-    texture: Texture<'a>,
+    texture: Texture,
 }
 
 impl<'a> ExampleVideoRenderer<'a> {
-    fn new<'b>(renderer: &'b Renderer, video_format: SdlVideoFormat, video_height: i32)
-               -> ExampleVideoRenderer<'b> {
+    fn new<'b>(renderer: &'a mut Renderer<'static>, video_format: SdlVideoFormat, video_height: u32)
+               -> Self {
+        let texture = renderer.create_texture(video_format.sdl_pixel_format,
+                                              TextureAccess::Streaming,
+                                              video_format.sdl_width as u32,
+                                              video_height).unwrap();
         ExampleVideoRenderer {
             renderer: renderer,
-            texture: renderer.create_texture(video_format.sdl_pixel_format,
-                                             TextureAccess::Streaming,
-                                             (video_format.sdl_width as i32,
-                                              video_height)).unwrap(),
+            texture: texture,
         }
     }
 
@@ -115,17 +114,16 @@ impl<'a> ExampleVideoRenderer<'a> {
         let video_track = reader.track_by_number(video_track_number as c_long);
         let video_track = video_track.as_video_track().unwrap();
 
-        let rect = if let &RendererParent::Window(ref window) = self.renderer.get_parent() {
+        /*let rect = if let &RendererParent::Window(ref window) = self.renderer.get_parent() {
             let (width, height) = window.get_size();
             Rect::new(0, 0, width, height)
         } else {
             panic!("Renderer parent wasn't a window!")
-        };
+        };*/
 
         self.upload(image, &*video_track);
-        let mut drawer = self.renderer.drawer();
-        drawer.copy(&self.texture, None, Some(rect));
-        drawer.present();
+        self.renderer.copy(&self.texture, None, None);
+        self.renderer.present();
     }
 
     fn upload(&mut self, image: Box<DecodedVideoFrame + 'static>, video_track: &VideoTrack) {
@@ -145,7 +143,7 @@ impl<'a> ExampleVideoRenderer<'a> {
             };
             let pixels = unsafe {
                 mem::transmute::<&mut [u8],
-                                 &mut [u8]>(slice::from_raw_mut_buf(&mut pixels.as_mut_ptr(),
+                                 &mut [u8]>(slice::from_raw_parts_mut(pixels.as_mut_ptr(),
                                                                     real_length))
             };
             upload_image(video_track, &*image, pixels, stride as i32)
@@ -188,9 +186,11 @@ impl SdlVideoFormat {
 
 pub struct ExampleAudioRenderer {
     samples: Vec<f32>,
+    spec: AudioSpec,
 }
 
-impl AudioCallback<f32> for ExampleAudioRenderer {
+impl AudioCallback for ExampleAudioRenderer {
+    type Channel = f32;
     fn callback(&mut self, out: &mut [f32]) {
         if self.samples.len() < out.len() {
             // Zero out the buffer to avoid damaging the listener's eardrums.
@@ -213,31 +213,31 @@ impl AudioCallback<f32> for ExampleAudioRenderer {
 }
 
 impl ExampleAudioRenderer {
-    pub fn new(sample_rate: f64, channels: u16) -> AudioDevice<ExampleAudioRenderer> {
+    pub fn new(sdl_audio: &AudioSubsystem, sample_rate: f64, channels: u16) -> AudioDevice<ExampleAudioRenderer> {
         let desired_spec = AudioSpecDesired {
-            freq: sample_rate as i32,
-            channels: cmp::min(channels, 2) as u8,
-            samples: 0,
-            callback: ExampleAudioRenderer {
-                samples: Vec::new(),
-            },
+            freq: Some(sample_rate as i32),
+            channels: Some(cmp::min(channels, 2) as u8),
+            samples: None,
         };
-        desired_spec.open_audio_device(None, false).unwrap()
+        sdl_audio.open_playback(None, &desired_spec, |spec| ExampleAudioRenderer {
+            samples: Vec::new(),
+            spec: spec,
+        }).unwrap()
     }
 }
 
 fn enqueue_audio_samples(device: &mut AudioDevice<ExampleAudioRenderer>,
                          input_samples: &[Vec<f32>]) {
     // Gather up all the channels so we can perform audio format conversion.
-    let channels = device.get_spec().channels;
     let input_samples: Vec<_> = input_samples.iter()
                                              .take(2)
                                              .map(|samples| samples.as_slice())
                                              .collect();
 
     // Make room for the samples in the output buffer.
-    let output_channels = cmp::min(channels, 2);
     let mut output = device.lock();
+    let channels = output.spec.channels;
+    let output_channels = cmp::min(channels, 2);
     let output_index = output.samples.len();
     let input_sample_count = input_samples[0].len();
     let output_length = input_sample_count * output_channels as usize;
@@ -260,7 +260,7 @@ fn upload_image(video_track: &VideoTrack,
     // Gather up all the input pixels and strides so we can do pixel format conversion.
     let lock = image.lock();
     let (mut input_pixels, mut input_strides) = (Vec::new(), Vec::new());
-    for plane in range(0, pixel_format.planes()) {
+    for plane in 0..pixel_format.planes() {
         input_pixels.push(lock.pixels(plane));
         input_strides.push(image.stride(plane) as usize);
     }
@@ -292,42 +292,47 @@ fn upload_image(video_track: &VideoTrack,
 }
 
 fn main() {
-    let args: Vec<String> = env::args().map(|arg| arg.into_string().unwrap()).collect();
+    let args: Vec<String> = env::args().map(|arg| arg.to_owned()).collect();
     if args.len() < 3 {
         println!("usage: example path-to-video-or-audio-file mime-type");
         return
     }
 
-    sdl2::init(INIT_VIDEO | INIT_AUDIO);
-    let file = Box::new(File::open(&Path::new(args[1].as_slice())).unwrap());
+    let sdl_context = sdl2::init().unwrap();
+    let sdl_video = sdl_context.video().unwrap();
+    let sdl_audio = sdl_context.audio().unwrap();
+    let mut event_pump = sdl_context.event_pump().unwrap();
+    let file = Box::new(File::open(&args[1]).unwrap());
 
-    let mut player = Player::new(file, args[2].as_slice());
+    let mut player = Player::new(file, &args[2]).unwrap();
     let mut media_player = ExampleMediaPlayer::new();
 
-    let renderer = player.video_track_number().map(|video_track_number| {
+    let mut renderer = player.video_track_number().map(|video_track_number| {
         let video_track = player.reader.track_by_number(video_track_number as c_long);
         let video_track = video_track.as_video_track().unwrap();
-        let window = Window::new("rust-media example",
-                                 WindowPos::PosCentered,
-                                 WindowPos::PosCentered,
-                                 video_track.width() as i32,
-                                 video_track.height() as i32,
-                                 OPENGL | RESIZABLE).unwrap();
-        Renderer::from_window(window, RenderDriverIndex::Auto, ACCELERATED | PRESENTVSYNC).unwrap()
+        let window = sdl_video.window("rust-media example",
+                                      video_track.width() as u32,
+                                      video_track.height() as u32)
+                                      .position_centered()
+                                      .opengl()
+                                      .resizable()
+                                      .build()
+                                      .unwrap();
+        window.renderer().accelerated().present_vsync().build().unwrap()
     });
     let mut video_renderer = player.video_track_number().map(|video_track_number| {
         let video_track = player.reader.track_by_number(video_track_number as c_long);
         let video_track = video_track.as_video_track().unwrap();
         let video_format = SdlVideoFormat::from_video_track(&*video_track);
-        ExampleVideoRenderer::new(renderer.as_ref().unwrap(),
+        ExampleVideoRenderer::new(renderer.as_mut().unwrap(),
                                   video_format,
-                                  video_track.height() as i32)
+                                  video_track.height() as u32)
     });
 
     let mut audio_renderer = player.audio_track_number().map(|audio_track_number| {
         let audio_track = player.reader.track_by_number(audio_track_number as c_long);
         let audio_track = audio_track.as_audio_track().unwrap();
-        let renderer = ExampleAudioRenderer::new(audio_track.sampling_rate(),
+        let renderer = ExampleAudioRenderer::new(&sdl_audio, audio_track.sampling_rate(),
                                                  audio_track.channels());
         renderer.resume();
         renderer
@@ -340,9 +345,9 @@ fn main() {
 
         let target_time_since_playback_start = (player.next_frame_presentation_time().unwrap() -
                                                 media_player.playback_start_ticks).duration();
-        let target_time = Duration::nanoseconds(media_player.playback_start_wallclock_time as i64)
-            + target_time_since_playback_start;
-        timer::sleep(target_time - Duration::nanoseconds(clock_ticks::precise_time_ns() as i64));
+        let target_time = Duration::new(0, media_player.playback_start_wallclock_time as u32)
+            + target_time_since_playback_start.to_std().unwrap();
+        sleep(target_time - Duration::new(0, clock_ticks::precise_time_ns() as u32));
 
         let frame = match player.advance() {
             Ok(frame) => frame,
@@ -356,7 +361,7 @@ fn main() {
             enqueue_audio_samples(audio_renderer, frame.audio_samples.unwrap().as_slice());
         }
 
-        if !media_player.poll_events(&mut player) {
+        if !media_player.poll_events(&mut event_pump, &mut player) {
             break
         }
     }
