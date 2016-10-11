@@ -2,7 +2,6 @@
 name = "rust-media-example"
 version = "0.1.0"
 dependencies = [
- "clock_ticks 0.1.0 (git+https://github.com/tomaka/clock_ticks.git)",
  "rust-media 0.1.0",
  "sdl2 0.24.0 (git+https://github.com/AngryLawyer/rust-sdl2?rev=62e08b3d4d0a043215165231cd093964260c4510)",
 ]
@@ -16,11 +15,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 name = "byteorder"
 version = "0.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-
-[[package]]
-name = "clock_ticks"
-version = "0.1.0"
-source = "git+https://github.com/tomaka/clock_ticks.git#34239b132f9c6e5c34b1280df272e6fd0772270e"
 
 [[package]]
 name = "core-foundation"
@@ -236,7 +230,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 [metadata]
 "checksum bitflags 0.6.0 (registry+https://github.com/rust-lang/crates.io-index)" = "72cd7314bd4ee024071241147222c706e80385a1605ac7d4cd2fcc339da2ae46"
 "checksum byteorder 0.5.3 (registry+https://github.com/rust-lang/crates.io-index)" = "0fc10e8cc6b2580fda3f36eb6dc5316657f812a3df879a44a66fc9f0fdbc4855"
-"checksum clock_ticks 0.1.0 (git+https://github.com/tomaka/clock_ticks.git)" = "<none>"
 "checksum core-foundation 0.2.2 (git+https://github.com/servo/rust-core-foundation)" = "<none>"
 "checksum core-foundation-sys 0.2.2 (git+https://github.com/servo/rust-core-foundation)" = "<none>"
 "checksum giflib-sys 0.1.0 (git+https://github.com/pcwalton/giflib)" = "<none>"

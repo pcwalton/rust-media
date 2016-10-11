@@ -9,7 +9,6 @@
 
 #![feature(collections, core, env, io, libc, os, path, rustc_private, std_misc)]
 
-extern crate clock_ticks;
 extern crate libc;
 extern crate rust_media as media;
 extern crate sdl2;
@@ -39,26 +38,26 @@ use std::mem;
 use std::fs::File;
 use std::thread::sleep;
 use std::slice;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 struct ExampleMediaPlayer {
     /// A reference timestamp at which playback began.
     playback_start_ticks: i64,
     /// A reference time in nanoseconds at which playback began.
-    playback_start_wallclock_time: u64,
+    playback_start_wallclock_time: Instant,
 }
 
 impl ExampleMediaPlayer {
     fn new() -> ExampleMediaPlayer {
         ExampleMediaPlayer {
             playback_start_ticks: 0,
-            playback_start_wallclock_time: clock_ticks::precise_time_ns(),
+            playback_start_wallclock_time: Instant::now(),
         }
     }
 
     fn resync(&mut self, ticks: i64) {
         self.playback_start_ticks = ticks;
-        self.playback_start_wallclock_time = clock_ticks::precise_time_ns()
+        self.playback_start_wallclock_time = Instant::now();
     }
 
     /// Polls events so we can quit if the user wanted to. Returns true to continue or false to
@@ -345,9 +344,9 @@ fn main() {
 
         let target_time_since_playback_start = (player.next_frame_presentation_time().unwrap() -
                                                 media_player.playback_start_ticks).duration();
-        let target_time = Duration::new(0, media_player.playback_start_wallclock_time as u32)
+        let target_time = media_player.playback_start_wallclock_time
             + target_time_since_playback_start.to_std().unwrap();
-        sleep(target_time - Duration::new(0, clock_ticks::precise_time_ns() as u32));
+        sleep(target_time - Instant::now());
 
         let frame = match player.advance() {
             Ok(frame) => frame,
