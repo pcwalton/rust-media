@@ -21,6 +21,7 @@ use std::cell::RefCell;
 use std::ffi::CString;
 use std::i32;
 use std::mem;
+use std::marker::PhantomData;
 use std::ptr;
 use std::slice;
 
@@ -342,7 +343,7 @@ impl AvFrame {
 
 pub struct AvPacket<'a> {
     packet: ffi::EitherAVPacket,
-    phantom: ::std::marker::PhantomData<&'a[u8]>,
+    phantom: PhantomData<&'a [u8]>,
 }
 
 impl<'a> AvPacket<'a> {
@@ -378,7 +379,7 @@ impl<'a> AvPacket<'a> {
 
         AvPacket {
             packet: packet,
-            phantom: ::std::marker::PhantomData,
+            phantom: PhantomData,
         }
     }
 }
