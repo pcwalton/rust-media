@@ -450,7 +450,7 @@ pub mod samples {
 #[allow(dead_code)]
 struct VideoDecoderImpl {
     codec: AvCodec,
-    context: RefCell<AvCodecContext>,
+    context: AvCodecContext,
 }
 
 impl VideoDecoderImpl {
@@ -466,13 +466,13 @@ impl VideoDecoderImpl {
         try!(result);
         Ok(Box::new(VideoDecoderImpl {
             codec: codec,
-            context: RefCell::new(context),
+            context: context,
         }) as Box<videodecoder::VideoDecoder + 'static>)
     }
 }
 
 impl videodecoder::VideoDecoder for VideoDecoderImpl {
-    fn decode_frame(&self, data: &[u8], presentation_time: &Timestamp)
+    fn decode_frame(&mut self, data: &[u8], presentation_time: &Timestamp)
                     -> Result<Box<videodecoder::DecodedVideoFrame + 'static>,()> {
         let mut data: Vec<_> = data.iter().map(|x| *x).collect();
         for _ in 0..FF_INPUT_BUFFER_PADDING_SIZE {
@@ -481,12 +481,12 @@ impl videodecoder::VideoDecoder for VideoDecoderImpl {
 
         let mut packet = AvPacket::new(data.as_mut_slice());
         let presentation_time = presentation_time.clone();
-        self.context.borrow_mut().set_get_buffer_callback(Box::new(move |frame: &AvFrame| {
+        self.context.set_get_buffer_callback(Box::new(move |frame: &AvFrame| {
             frame.set_user_data(Box::new(presentation_time))
         }));
 
         let frame = AvFrame::new();
-        match self.context.borrow().decode_video(&frame, &mut packet) {
+        match self.context.decode_video(&frame, &mut packet) {
             Ok(true) => {
                 Ok(Box::new(DecodedVideoFrameImpl {
                     frame: frame,

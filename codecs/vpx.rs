@@ -63,10 +63,10 @@ impl VpxCodec {
         })
     }
 
-    pub fn decode(&self, data: &[u8], deadline: c_long) -> Result<(),ffi::vpx_codec_err_t> {
+    pub fn decode(&mut self, data: &[u8], deadline: c_long) -> Result<(),ffi::vpx_codec_err_t> {
         assert!(data.len() <= (u32::MAX as usize));
         let error = unsafe {
-            ffi::vpx_codec_decode(&self.ctx as *const _ as *mut _,
+            ffi::vpx_codec_decode(&mut self.ctx,
                                   data.as_ptr(),
                                   data.len() as c_uint,
                                   ptr::null_mut(),
@@ -192,7 +192,7 @@ impl VideoDecoderImpl {
 }
 
 impl videodecoder::VideoDecoder for VideoDecoderImpl {
-    fn decode_frame(&self, data: &[u8], presentation_time: &Timestamp)
+    fn decode_frame(&mut self, data: &[u8], presentation_time: &Timestamp)
                     -> Result<Box<videodecoder::DecodedVideoFrame + 'static>,()> {
         if self.codec.decode(data, 0).is_err() {
             return Err(())
