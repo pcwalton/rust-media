@@ -17,7 +17,6 @@ use videodecoder;
 
 use libc::{c_double, c_int, c_uint, c_void};
 use std::any::Any;
-use std::cell::RefCell;
 use std::ffi::CString;
 use std::i32;
 use std::mem;
@@ -405,8 +404,8 @@ impl AvDictionary {
 
     pub fn set(&mut self, key: &str, value: &str) {
         unsafe {
-            let key = unsafe { CString::from_vec_unchecked(key.into()) };
-            let value = unsafe { CString::from_vec_unchecked(value.into()) };
+            let key = CString::from_vec_unchecked(key.into());
+            let value = CString::from_vec_unchecked(value.into());
             assert!(ffi::av_dict_set(&mut self.dictionary, key.as_ptr(), value.as_ptr(), 0) >= 0);
         }
     }
@@ -659,26 +658,16 @@ pub mod ffi {
 
     pub const AV_NUM_DATA_POINTERS: usize = 8;
 
-    #[repr(C)]
-    pub struct AVBuffer;
-    #[repr(C)]
-    pub struct AVClass;
-    #[repr(C)]
-    pub struct AVCodec;
-    #[repr(C)]
-    pub struct AVCodecContext;
-    #[repr(C)]
-    pub struct AVCodecInternal;
-    #[repr(C)]
-    pub struct AVDictionary;
-    #[repr(C)]
-    pub struct AVFrameSideData;
-    #[repr(C)]
-    pub struct AVPacket;
-    #[repr(C)]
-    pub struct AVPacketSideData;
-    #[repr(C)]
-    pub struct AVPanScan;
+    pub enum AVBuffer {}
+    pub struct AVClass {}
+    pub enum AVCodec {}
+    pub enum AVCodecContext {}
+    pub enum AVCodecInternal {}
+    pub enum AVDictionary {}
+    pub enum AVFrameSideData {}
+    pub enum AVPacket {}
+    pub enum AVPacketSideData {}
+    pub enum AVPanScan {}
 
     #[repr(C)]
     pub struct AVBufferRef {

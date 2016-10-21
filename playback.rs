@@ -7,9 +7,8 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use audiodecoder::{AudioDecoder, AudioDecoderInfo, RegisteredAudioDecoder};
-use container::{AudioTrack, ContainerReader, Frame, RegisteredContainerReader, Track, TrackType};
-use container::{VideoTrack};
+use audiodecoder::{AudioDecoder, RegisteredAudioDecoder};
+use container::{ContainerReader, Frame, RegisteredContainerReader, TrackType};
 use streaming::StreamReader;
 use timing::Timestamp;
 use videodecoder::{DecodedVideoFrame, RegisteredVideoDecoder, VideoDecoder};

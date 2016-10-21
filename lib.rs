@@ -8,7 +8,6 @@
 // except according to those terms.
 
 #![feature(alloc, libc, custom_derive, plugin)]
-#![feature(heap_api)]
 #![plugin(num_macros)]
 
 extern crate alloc;

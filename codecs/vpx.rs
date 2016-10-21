@@ -288,8 +288,7 @@ pub mod ffi {
         h: c_uint,
     }
 
-    #[repr(C)]
-    pub struct vpx_codec_iter;
+    pub enum vpx_codec_iter {}
 
     #[repr(C)]
     pub struct vpx_image_t {
@@ -320,10 +319,8 @@ pub mod ffi {
         fb_priv: *mut c_void,
     }
 
-    #[repr(C)]
-    pub struct vpx_codec_iface_t;
-    #[repr(C)]
-    pub struct vpx_codec_priv_t;
+    pub enum vpx_codec_iface_t {}
+    pub enum vpx_codec_priv_t {}
 
     pub const VPX_IMAGE_ABI_VERSION: c_int = 3;
     pub const VPX_CODEC_ABI_VERSION: c_int = 2 + VPX_IMAGE_ABI_VERSION;

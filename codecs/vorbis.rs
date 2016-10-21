@@ -336,8 +336,8 @@ pub mod ffi {
 
     use libc::{c_char, c_float, c_int, c_long, c_uchar, c_void};
 
-    #[repr(C)]
-    pub struct alloc_chain;
+    #[allow(non_camel_case_types)]
+    pub enum alloc_chain {}
 
     #[repr(C)]
     pub struct vorbis_info {
