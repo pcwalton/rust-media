@@ -16,6 +16,8 @@ extern crate libc;
 extern crate num;
 extern crate time;
 
+extern crate lewton;
+
 #[cfg(target_os = "macos")]
 extern crate core_foundation;
 

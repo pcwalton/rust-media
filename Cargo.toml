@@ -31,10 +31,10 @@ branch = "servo"
 git = "https://github.com/pcwalton/ogg"
 branch = "servo"
 
-[dependencies.vorbis-sys]
+[dependencies.lewton]
 
-git = "https://github.com/pcwalton/vorbis"
-branch = "servo"
+version = "0.4"
+default-features = false
 
 [dependencies.giflib-sys]
 
