@@ -51,6 +51,11 @@ num-macros = "*"
 time = "*"
 byteorder = "*"
 
+[dev-dependencies]
+hound = "2.0"
+lewton = {version = "*", features = ["ogg"]}
+ogg = "0.4"
+
 [features]
 
 default = []
