@@ -719,8 +719,7 @@ pub const CONTAINER_READER: container::RegisteredContainerReader =
 pub mod ffi {
     use libc::{c_char, c_double, c_int, c_void};
 
-    #[repr(C)]
-    pub struct MP4FileHandleStruct;
+    pub enum MP4FileHandleStruct {}
     #[repr(C)]
     pub struct MP4FileProvider {
         pub open: extern "C" fn(name: *const c_char, mode: MP4FileMode) -> *mut c_void,

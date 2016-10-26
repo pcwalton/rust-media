@@ -8,7 +8,6 @@
 // except according to those terms.
 
 #![feature(alloc, libc, custom_derive, plugin)]
-#![feature(heap_api)]
 #![plugin(num_macros)]
 
 extern crate alloc;
@@ -16,6 +15,8 @@ extern crate byteorder;
 extern crate libc;
 extern crate num;
 extern crate time;
+
+extern crate lewton;
 
 #[cfg(target_os = "macos")]
 extern crate core_foundation;

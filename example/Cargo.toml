@@ -12,7 +12,7 @@ path = "example.rs"
 [dependencies.rust-media]
 
 path = ".."
-features = ["ffmpeg"]
+features = []
 
 [dependencies.sdl2]
 

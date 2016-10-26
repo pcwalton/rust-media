@@ -987,30 +987,19 @@ type WebmBlockEntryRef = *mut WebmBlockEntry;
 type WebmBlockRef = *mut WebmBlock;
 type WebmBlockFrameRef = *mut WebmBlockFrame;
 
-#[repr(C)]
-struct WebmIMkvReader;
-#[repr(C)]
-struct WebmEbmlReader;
-#[repr(C)]
-struct WebmSegment;
-#[repr(C)]
-struct WebmSegmentInfo;
-#[repr(C)]
-struct WebmTracks;
-#[repr(C)]
-struct WebmTrack;
-#[repr(C)]
-struct WebmVideoTrack;
-#[repr(C)]
-struct WebmAudioTrack;
-#[repr(C)]
-struct WebmCluster;
-#[repr(C)]
-struct WebmBlockEntry;
-#[repr(C)]
-struct WebmBlock;
-#[repr(C)]
-struct WebmBlockFrame;
+enum WebmIMkvReader {}
+enum WebmEbmlReader {}
+enum WebmSegment {}
+enum WebmSegmentInfo {}
+enum WebmTracks {}
+enum WebmTrack {}
+enum WebmVideoTrack {}
+enum WebmAudioTrack {}
+enum WebmCluster {}
+enum WebmBlockEntry {}
+enum WebmBlock {}
+enum WebmBlockFrame {}
+
 #[repr(C)]
 #[allow(non_snake_case)]
 struct WebmCustomMkvReaderCallbacks {

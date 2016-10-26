@@ -7,7 +7,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#![feature(collections, core, env, io, libc, os, path, rustc_private, std_misc)]
+#![feature(libc, rustc_private)]
 
 extern crate libc;
 extern crate rust_media as media;
@@ -18,18 +18,16 @@ extern crate log;
 
 use libc::c_long;
 use media::audioformat::{ConvertAudioFormat, Float32Interleaved, Float32Planar};
-use media::container::{AudioTrack, ContainerReader, Frame, Track, VideoTrack};
-use media::pixelformat::{ConvertPixelFormat, PixelFormat, Rgb24};
+use media::container::VideoTrack;
+use media::pixelformat::{ConvertPixelFormat, PixelFormat};
 use media::playback::Player;
-use media::videodecoder::{DecodedVideoFrame, VideoDecoder};
+use media::videodecoder::DecodedVideoFrame;
 use sdl2::audio::{AudioCallback, AudioDevice, AudioSpecDesired, AudioSpec};
-use sdl2::event::{self, Event, WindowEventId};
+use sdl2::event::WindowEventId;
 use sdl2::keyboard::Keycode;
 use sdl2::pixels::PixelFormatEnum;
-use sdl2::rect::Rect;
 use sdl2::render::Renderer;
 use sdl2::render::{Texture, TextureAccess};
-use sdl2::init;
 use sdl2::EventPump;
 use sdl2::AudioSubsystem;
 use std::cmp;
@@ -38,7 +36,7 @@ use std::mem;
 use std::fs::File;
 use std::thread::sleep;
 use std::slice;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 struct ExampleMediaPlayer {
     /// A reference timestamp at which playback began.
@@ -121,7 +119,7 @@ impl<'a> ExampleVideoRenderer<'a> {
         };*/
 
         self.upload(image, &*video_track);
-        self.renderer.copy(&self.texture, None, None);
+        self.renderer.copy(&self.texture, None, None).unwrap();
         self.renderer.present();
     }
 

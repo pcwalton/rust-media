@@ -118,7 +118,7 @@ impl VTDecompressionSession {
         }
     }
 
-    pub fn decode_frame(&self, sample_buffer: &CMSampleBuffer, decode_flags: VTDecodeFrameFlags)
+    pub fn decode_frame(&mut self, sample_buffer: &CMSampleBuffer, decode_flags: VTDecodeFrameFlags)
                         -> Result<(),OSStatus> {
         let err = unsafe {
             ffi::VTDecompressionSessionDecodeFrame(self.as_concrete_TypeRef(),
@@ -205,7 +205,7 @@ impl VideoDecoderImpl {
 }
 
 impl videodecoder::VideoDecoder for VideoDecoderImpl {
-    fn decode_frame(&self, data: &[u8], presentation_time: &Timestamp)
+    fn decode_frame(&mut self, data: &[u8], presentation_time: &Timestamp)
                     -> Result<Box<videodecoder::DecodedVideoFrame + 'static>,()> {
         let block_buffer = match CMBlockBuffer::from_memory_block(data.len()) {
             Ok(block_buffer) => block_buffer,

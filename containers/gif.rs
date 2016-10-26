@@ -725,7 +725,7 @@ impl VideoDecoderImpl {
 }
 
 impl videodecoder::VideoDecoder for VideoDecoderImpl {
-    fn decode_frame(&self, data: &[u8], presentation_time: &Timestamp)
+    fn decode_frame(&mut self, data: &[u8], presentation_time: &Timestamp)
                     -> Result<Box<videodecoder::DecodedVideoFrame + 'static>,()> {
         let mut reader = BufReader::new(data);
         let palette_size = match reader.read_u16::<LittleEndian>() {

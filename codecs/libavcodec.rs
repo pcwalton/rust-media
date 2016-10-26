@@ -17,7 +17,6 @@ use videodecoder;
 
 use libc::{c_double, c_int, c_uint, c_void};
 use std::any::Any;
-use std::cell::RefCell;
 use std::ffi::CString;
 use std::i32;
 use std::mem;
@@ -405,8 +404,8 @@ impl AvDictionary {
 
     pub fn set(&mut self, key: &str, value: &str) {
         unsafe {
-            let key = unsafe { CString::from_vec_unchecked(key.into()) };
-            let value = unsafe { CString::from_vec_unchecked(value.into()) };
+            let key = CString::from_vec_unchecked(key.into());
+            let value = CString::from_vec_unchecked(value.into());
             assert!(ffi::av_dict_set(&mut self.dictionary, key.as_ptr(), value.as_ptr(), 0) >= 0);
         }
     }
@@ -450,7 +449,7 @@ pub mod samples {
 #[allow(dead_code)]
 struct VideoDecoderImpl {
     codec: AvCodec,
-    context: RefCell<AvCodecContext>,
+    context: AvCodecContext,
 }
 
 impl VideoDecoderImpl {
@@ -466,13 +465,13 @@ impl VideoDecoderImpl {
         try!(result);
         Ok(Box::new(VideoDecoderImpl {
             codec: codec,
-            context: RefCell::new(context),
+            context: context,
         }) as Box<videodecoder::VideoDecoder + 'static>)
     }
 }
 
 impl videodecoder::VideoDecoder for VideoDecoderImpl {
-    fn decode_frame(&self, data: &[u8], presentation_time: &Timestamp)
+    fn decode_frame(&mut self, data: &[u8], presentation_time: &Timestamp)
                     -> Result<Box<videodecoder::DecodedVideoFrame + 'static>,()> {
         let mut data: Vec<_> = data.iter().map(|x| *x).collect();
         for _ in 0..FF_INPUT_BUFFER_PADDING_SIZE {
@@ -481,12 +480,12 @@ impl videodecoder::VideoDecoder for VideoDecoderImpl {
 
         let mut packet = AvPacket::new(data.as_mut_slice());
         let presentation_time = presentation_time.clone();
-        self.context.borrow_mut().set_get_buffer_callback(Box::new(move |frame: &AvFrame| {
+        self.context.set_get_buffer_callback(Box::new(move |frame: &AvFrame| {
             frame.set_user_data(Box::new(presentation_time))
         }));
 
         let frame = AvFrame::new();
-        match self.context.borrow().decode_video(&frame, &mut packet) {
+        match self.context.decode_video(&frame, &mut packet) {
             Ok(true) => {
                 Ok(Box::new(DecodedVideoFrameImpl {
                     frame: frame,
@@ -659,26 +658,16 @@ pub mod ffi {
 
     pub const AV_NUM_DATA_POINTERS: usize = 8;
 
-    #[repr(C)]
-    pub struct AVBuffer;
-    #[repr(C)]
-    pub struct AVClass;
-    #[repr(C)]
-    pub struct AVCodec;
-    #[repr(C)]
-    pub struct AVCodecContext;
-    #[repr(C)]
-    pub struct AVCodecInternal;
-    #[repr(C)]
-    pub struct AVDictionary;
-    #[repr(C)]
-    pub struct AVFrameSideData;
-    #[repr(C)]
-    pub struct AVPacket;
-    #[repr(C)]
-    pub struct AVPacketSideData;
-    #[repr(C)]
-    pub struct AVPanScan;
+    pub enum AVBuffer {}
+    pub struct AVClass {}
+    pub enum AVCodec {}
+    pub enum AVCodecContext {}
+    pub enum AVCodecInternal {}
+    pub enum AVDictionary {}
+    pub enum AVFrameSideData {}
+    pub enum AVPacket {}
+    pub enum AVPacketSideData {}
+    pub enum AVPanScan {}
 
     #[repr(C)]
     pub struct AVBufferRef {

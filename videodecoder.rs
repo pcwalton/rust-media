@@ -18,7 +18,7 @@ use codecs::libavcodec;
 use platform;
 
 pub trait VideoDecoder {
-    fn decode_frame(&self, data: &[u8], presentation_time: &Timestamp)
+    fn decode_frame(&mut self, data: &[u8], presentation_time: &Timestamp)
                     -> Result<Box<DecodedVideoFrame + 'static>,()>;
 }
 

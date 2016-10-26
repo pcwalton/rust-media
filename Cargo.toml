@@ -31,10 +31,11 @@ branch = "servo"
 git = "https://github.com/pcwalton/ogg"
 branch = "servo"
 
-[dependencies.vorbis-sys]
+[dependencies.lewton]
 
-git = "https://github.com/pcwalton/vorbis"
-branch = "servo"
+version = "0.4"
+default-features = false
+features = ["ieee754"]
 
 [dependencies.giflib-sys]
 
@@ -49,6 +50,11 @@ num = "*"
 num-macros = "*"
 time = "*"
 byteorder = "*"
+
+[dev-dependencies]
+hound = "2.0"
+lewton = {version = "*", features = ["ogg"]}
+ogg = "0.4"
 
 [features]
 
