@@ -23,8 +23,12 @@ pub trait VideoDecoder {
 }
 
 pub trait VideoHeaders {
-    fn h264_seq_headers<'a>(&'a self) -> Option<Vec<&'a [u8]>>;
-    fn h264_pict_headers<'a>(&'a self) -> Option<Vec<&'a [u8]>>;
+    fn h264_seq_headers<'a>(&'a self) -> Option<Vec<&'a [u8]>> {
+        None
+    }
+    fn h264_pict_headers<'a>(&'a self) -> Option<Vec<&'a [u8]>> {
+        None
+    }
 }
 
 pub trait DecodedVideoFrame {
@@ -44,15 +48,7 @@ pub trait DecodedVideoFrameLockGuard {
 #[derive(Copy, Clone)]
 pub struct EmptyVideoHeadersImpl;
 
-impl VideoHeaders for EmptyVideoHeadersImpl {
-    fn h264_seq_headers<'a>(&'a self) -> Option<Vec<&'a [u8]>> {
-        None
-    }
-
-    fn h264_pict_headers<'a>(&'a self) -> Option<Vec<&'a [u8]>> {
-        None
-    }
-}
+impl VideoHeaders for EmptyVideoHeadersImpl {}
 
 #[allow(missing_copy_implementations)]
 pub struct RegisteredVideoDecoder {

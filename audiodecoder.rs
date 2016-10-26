@@ -18,8 +18,12 @@ use codecs::libavcodec;
 use platform;
 
 pub trait AudioHeaders {
-    fn vorbis_headers<'a>(&'a self) -> Option<&'a VorbisHeaders>;
-    fn aac_headers<'a>(&'a self) -> Option<&'a AacHeaders>;
+    fn vorbis_headers<'a>(&'a self) -> Option<&'a VorbisHeaders> {
+        None
+    }
+    fn aac_headers<'a>(&'a self) -> Option<&'a AacHeaders> {
+        None
+    }
 }
 
 pub trait AudioDecoderInfo {
@@ -40,14 +44,7 @@ pub trait DecodedAudioSamples {
 #[derive(Copy, Clone)]
 pub struct EmptyAudioHeadersImpl;
 
-impl AudioHeaders for EmptyAudioHeadersImpl {
-    fn vorbis_headers<'a>(&'a self) -> Option<&'a VorbisHeaders> {
-        None
-    }
-    fn aac_headers<'a>(&'a self) -> Option<&'a AacHeaders> {
-        None
-    }
-}
+impl AudioHeaders for EmptyAudioHeadersImpl {}
 
 #[allow(missing_copy_implementations)]
 pub struct RegisteredAudioDecoder {
