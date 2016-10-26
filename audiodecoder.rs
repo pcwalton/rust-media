@@ -76,27 +76,14 @@ impl RegisteredAudioDecoder {
     }
 }
 
-#[cfg(all(target_os="macos", feature="ffmpeg"))]
-pub static AUDIO_DECODERS: [RegisteredAudioDecoder; 3] = [
+pub static AUDIO_DECODERS: [RegisteredAudioDecoder;
+    1 +
+    cfg!(target_os="macos") as usize +
+    cfg!(feature="ffmpeg") as usize
+] = [
     vorbis::AUDIO_DECODER,
-    libavcodec::AUDIO_DECODER,
+    #[cfg(target_os="macos")]
     platform::macos::audiounit::AUDIO_DECODER,
-];
-
-#[cfg(all(target_os="macos", not(feature="ffmpeg")))]
-pub static AUDIO_DECODERS: [RegisteredAudioDecoder; 2] = [
-    vorbis::AUDIO_DECODER,
-    platform::macos::audiounit::AUDIO_DECODER,
-];
-
-#[cfg(all(not(target_os="macos"), feature="ffmpeg"))]
-pub static AUDIO_DECODERS: [RegisteredAudioDecoder; 2] = [
-    vorbis::AUDIO_DECODER,
+    #[cfg(feature="ffmpeg")]
     libavcodec::AUDIO_DECODER,
 ];
-
-#[cfg(all(not(target_os="macos"), not(feature="ffmpeg")))]
-pub static AUDIO_DECODERS: [RegisteredAudioDecoder; 1] = [
-    vorbis::AUDIO_DECODER,
-];
-
