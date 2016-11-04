@@ -7,13 +7,14 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#![feature(alloc, libc, custom_derive, plugin)]
-#![plugin(num_macros)]
+#![feature(alloc, libc, proc_macro)]
 
 extern crate alloc;
 extern crate byteorder;
 extern crate libc;
 extern crate num;
+#[macro_use]
+extern crate num_derive;
 extern crate time;
 
 extern crate lewton;
