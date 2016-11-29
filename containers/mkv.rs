@@ -613,7 +613,6 @@ impl<'a> BlockFrame<'a> {
     }
 }
 
-#[proc_macro_derive(FromPrimitive)]
 #[derive(Clone, Copy, Debug, FromPrimitive, PartialEq)]
 pub enum TrackType {
     Video = 1,
