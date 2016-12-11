@@ -4,7 +4,7 @@ AR ?= ar
 SRC = mkvparser.cpp
 OBJS = $(SRC:%.cpp=$(OUT_DIR)/%.o)
 
-LIBWEBM_OUTDIR ?= $(shell find $(OUT_DIR)/../.. -name 'libwebm-*' '(' -type d -or -type l ')')/out
+LIBWEBM_OUTDIR ?= $(shell find $(OUT_DIR)/../.. -name 'mkvparser.hpp' '(' -type f -or -type l ')' -exec dirname {} \; | grep libwebm)
 
 CXXFLAGS += -std=gnu++11 -Wall -I$(LIBWEBM_OUTDIR) -O2 -fPIC
 
