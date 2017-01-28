@@ -47,7 +47,7 @@ git = "https://github.com/servo/rust-core-foundation"
 
 [dependencies]
 num = "*"
-num-derive = "0.1.38"
+num-derive = "0.1.39"
 time = "*"
 byteorder = "*"
 

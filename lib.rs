@@ -7,7 +7,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#![feature(alloc, libc, proc_macro)]
+#![feature(alloc, libc)]
 
 extern crate alloc;
 extern crate byteorder;
