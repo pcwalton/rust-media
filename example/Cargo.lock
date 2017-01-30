@@ -120,6 +120,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "num-derive"
+version = "0.1.39"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+dependencies = [
+ "quote 0.1.4 (registry+https://github.com/rust-lang/crates.io-index)",
+ "syn 0.7.1 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
 name = "num-integer"
 version = "0.1.32"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -135,11 +144,6 @@ dependencies = [
  "num-integer 0.1.32 (registry+https://github.com/rust-lang/crates.io-index)",
  "num-traits 0.1.36 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
-
-[[package]]
-name = "num-macros"
-version = "0.1.36"
-source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
 name = "num-rational"
@@ -163,6 +167,11 @@ version = "0.1.0"
 source = "git+https://github.com/pcwalton/ogg?branch=servo#c6b10c9b337bb68596f9c096c087f657b3b26ab5"
 
 [[package]]
+name = "quote"
+version = "0.1.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+
+[[package]]
 name = "rand"
 version = "0.3.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -182,7 +191,7 @@ dependencies = [
  "libwebm-sys 0.1.0 (git+https://github.com/pcwalton/libwebm?branch=servo)",
  "mp4v2-sys 0.1.0 (git+https://github.com/pcwalton/mp4v2?branch=servo)",
  "num 0.1.36 (registry+https://github.com/rust-lang/crates.io-index)",
- "num-macros 0.1.36 (registry+https://github.com/rust-lang/crates.io-index)",
+ "num-derive 0.1.39 (registry+https://github.com/rust-lang/crates.io-index)",
  "ogg-sys 0.1.0 (git+https://github.com/pcwalton/ogg?branch=servo)",
  "time 0.1.35 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
@@ -211,6 +220,14 @@ version = "0.24.0"
 source = "git+https://github.com/AngryLawyer/rust-sdl2?rev=62e08b3d4d0a043215165231cd093964260c4510#62e08b3d4d0a043215165231cd093964260c4510"
 dependencies = [
  "libc 0.2.16 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "syn"
+version = "0.7.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+dependencies = [
+ "quote 0.1.4 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -250,16 +267,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 "checksum num 0.1.36 (registry+https://github.com/rust-lang/crates.io-index)" = "bde7c03b09e7c6a301ee81f6ddf66d7a28ec305699e3d3b056d2fc56470e3120"
 "checksum num-bigint 0.1.35 (registry+https://github.com/rust-lang/crates.io-index)" = "88b14378471f7c2adc5262f05b4701ef53e8da376453a8d8fee48e51db745e49"
 "checksum num-complex 0.1.35 (registry+https://github.com/rust-lang/crates.io-index)" = "f0c78e054dd19c3fd03419ade63fa661e9c49bb890ce3beb4eee5b7baf93f92f"
+"checksum num-derive 0.1.39 (registry+https://github.com/rust-lang/crates.io-index)" = "c8bdc32450baf46be50a6dc8e9f70916c93142100841545c6810dbda5d79eaa6"
 "checksum num-integer 0.1.32 (registry+https://github.com/rust-lang/crates.io-index)" = "fb24d9bfb3f222010df27995441ded1e954f8f69cd35021f6bef02ca9552fb92"
 "checksum num-iter 0.1.32 (registry+https://github.com/rust-lang/crates.io-index)" = "287a1c9969a847055e1122ec0ea7a5c5d6f72aad97934e131c83d5c08ab4e45c"
-"checksum num-macros 0.1.36 (registry+https://github.com/rust-lang/crates.io-index)" = "260f43d0e7e6bb0d4360f356a45a5f53fd4153ef1583b656b6ff35b7dae9cf0a"
 "checksum num-rational 0.1.35 (registry+https://github.com/rust-lang/crates.io-index)" = "54ff603b8334a72fbb27fe66948aac0abaaa40231b3cecd189e76162f6f38aaf"
 "checksum num-traits 0.1.36 (registry+https://github.com/rust-lang/crates.io-index)" = "a16a42856a256b39c6d3484f097f6713e14feacd9bfb02290917904fae46c81c"
 "checksum ogg-sys 0.1.0 (git+https://github.com/pcwalton/ogg?branch=servo)" = "<none>"
+"checksum quote 0.1.4 (registry+https://github.com/rust-lang/crates.io-index)" = "b0f1847d90ff21d41b08f7f9f8e82dff613c3e2c5ebc9f8a10aeee1a0c4d7d17"
 "checksum rand 0.3.14 (registry+https://github.com/rust-lang/crates.io-index)" = "2791d88c6defac799c3f20d74f094ca33b9332612d9aef9078519c82e4fe04a5"
 "checksum rustc-serialize 0.3.19 (registry+https://github.com/rust-lang/crates.io-index)" = "6159e4e6e559c81bd706afe9c8fd68f547d3e851ce12e76b1de7914bab61691b"
 "checksum sdl2 0.24.0 (git+https://github.com/AngryLawyer/rust-sdl2?rev=62e08b3d4d0a043215165231cd093964260c4510)" = "<none>"
 "checksum sdl2-sys 0.24.0 (git+https://github.com/AngryLawyer/rust-sdl2?rev=62e08b3d4d0a043215165231cd093964260c4510)" = "<none>"
+"checksum syn 0.7.1 (registry+https://github.com/rust-lang/crates.io-index)" = "2d25c61533bd33b0badb0b96178731a19407586f8a2547753095109c142e5242"
 "checksum time 0.1.35 (registry+https://github.com/rust-lang/crates.io-index)" = "3c7ec6d62a20df54e07ab3b78b9a3932972f4b7981de295563686849eb3989af"
 "checksum winapi 0.2.8 (registry+https://github.com/rust-lang/crates.io-index)" = "167dc9d6949a9b857f3451275e911c3f44255842c1f7a76f33c55103a909087a"
 "checksum winapi-build 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)" = "2d315eee3b34aca4797b2da6b13ed88266e6d612562a0c46390af8299fc699bc"

@@ -23,8 +23,12 @@ pub trait VideoDecoder {
 }
 
 pub trait VideoHeaders {
-    fn h264_seq_headers<'a>(&'a self) -> Option<Vec<&'a [u8]>>;
-    fn h264_pict_headers<'a>(&'a self) -> Option<Vec<&'a [u8]>>;
+    fn h264_seq_headers<'a>(&'a self) -> Option<Vec<&'a [u8]>> {
+        None
+    }
+    fn h264_pict_headers<'a>(&'a self) -> Option<Vec<&'a [u8]>> {
+        None
+    }
 }
 
 pub trait DecodedVideoFrame {
@@ -44,15 +48,7 @@ pub trait DecodedVideoFrameLockGuard {
 #[derive(Copy, Clone)]
 pub struct EmptyVideoHeadersImpl;
 
-impl VideoHeaders for EmptyVideoHeadersImpl {
-    fn h264_seq_headers<'a>(&'a self) -> Option<Vec<&'a [u8]>> {
-        None
-    }
-
-    fn h264_pict_headers<'a>(&'a self) -> Option<Vec<&'a [u8]>> {
-        None
-    }
-}
+impl VideoHeaders for EmptyVideoHeadersImpl {}
 
 #[allow(missing_copy_implementations)]
 pub struct RegisteredVideoDecoder {
@@ -81,33 +77,15 @@ impl RegisteredVideoDecoder {
     }
 }
 
-// FIXME(pcwalton): Combinatorial explosion imminent. :( Can we do something clever with macros?
-
-#[cfg(all(target_os="macos", feature="ffmpeg"))]
-pub static VIDEO_DECODERS: [RegisteredVideoDecoder; 4] = [
+pub static VIDEO_DECODERS: [RegisteredVideoDecoder;
+    2 +
+    cfg!(target_os="macos") as usize +
+    cfg!(feature="ffmpeg") as usize
+] = [
     vpx::VIDEO_DECODER,
     gif::VIDEO_DECODER,
-    libavcodec::VIDEO_DECODER,
+    #[cfg(target_os="macos")]
     platform::macos::videotoolbox::VIDEO_DECODER,
-];
-
-#[cfg(all(target_os="macos", not(feature="ffmpeg")))]
-pub static VIDEO_DECODERS: [RegisteredVideoDecoder; 3] = [
-    vpx::VIDEO_DECODER,
-    gif::VIDEO_DECODER,
-    platform::macos::videotoolbox::VIDEO_DECODER,
-];
-
-#[cfg(all(not(target_os="macos"), feature="ffmpeg"))]
-pub static VIDEO_DECODERS: [RegisteredVideoDecoder; 3] = [
-    vpx::VIDEO_DECODER,
-    gif::VIDEO_DECODER,
+    #[cfg(feature="ffmpeg")]
     libavcodec::VIDEO_DECODER,
 ];
-
-#[cfg(all(not(target_os="macos"), not(feature="ffmpeg")))]
-pub static VIDEO_DECODERS: [RegisteredVideoDecoder; 2] = [
-    vpx::VIDEO_DECODER,
-    gif::VIDEO_DECODER,
-];
-

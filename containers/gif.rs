@@ -440,7 +440,7 @@ impl GraphicsControlBlock {
 }
 
 #[repr(i32)]
-#[derive(Copy, Clone, NumFromPrimitive)]
+#[derive(Copy, Clone, FromPrimitive)]
 pub enum DisposalMode {
     Unspecified = 0,
     DoNot = 1,

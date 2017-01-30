@@ -8,16 +8,12 @@
 // except according to those terms.
 
 use audiodecoder::AudioHeaders;
-use codecs::vorbis::VorbisHeaders;
 
 pub struct AacHeaders {
     pub esds_chunk: Vec<u8>,
 }
 
 impl AudioHeaders for AacHeaders {
-    fn vorbis_headers<'a>(&'a self) -> Option<&'a VorbisHeaders> {
-        None
-    }
     fn aac_headers<'a>(&'a self) -> Option<&'a AacHeaders> {
         Some(self)
     }

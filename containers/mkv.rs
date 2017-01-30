@@ -613,7 +613,7 @@ impl<'a> BlockFrame<'a> {
     }
 }
 
-#[derive(Clone, Copy, Debug, NumFromPrimitive, PartialEq)]
+#[derive(Clone, Copy, Debug, FromPrimitive, PartialEq)]
 pub enum TrackType {
     Video = 1,
     Audio = 2,

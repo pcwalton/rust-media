@@ -8,7 +8,6 @@
 // except according to those terms.
 
 use audiodecoder;
-use codecs::aac::AacHeaders;
 
 use libc::{c_int};
 
@@ -63,9 +62,6 @@ impl VorbisHeaders {
 impl audiodecoder::AudioHeaders for VorbisHeaders {
     fn vorbis_headers<'a>(&'a self) -> Option<&'a VorbisHeaders> {
         Some(self)
-    }
-    fn aac_headers<'a>(&'a self) -> Option<&'a AacHeaders> {
-        None
     }
 }
 
