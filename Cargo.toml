@@ -56,6 +56,12 @@ hound = "2.0"
 lewton = {version = "*", features = ["ogg"]}
 ogg = "0.4"
 
+[build-dependencies]
+# Needed for mkvparse.hpp.
+# If we don't include this, libwebm-sys might not be present in
+# the target directory after a fresh clone due to a race condition.
+libwebm-sys = { git = "https://github.com/pcwalton/libwebm", branch = "servo" }
+
 [features]
 
 default = []
