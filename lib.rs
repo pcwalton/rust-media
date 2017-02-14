@@ -7,8 +7,9 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#![feature(alloc)]
+#![cfg_attr(target_os="macos", feature(alloc))]
 
+#[cfg(target_os="macos")]
 extern crate alloc;
 extern crate byteorder;
 extern crate libc;
