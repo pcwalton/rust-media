@@ -50,6 +50,7 @@ num = "*"
 num-derive = "0.1.39"
 time = "*"
 byteorder = "*"
+libc = "0.2"
 
 [dev-dependencies]
 hound = "2.0"
