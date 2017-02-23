@@ -2,6 +2,8 @@
 name = "rust-media-example"
 version = "0.1.0"
 dependencies = [
+ "libc 0.2.16 (registry+https://github.com/rust-lang/crates.io-index)",
+ "log 0.3.6 (registry+https://github.com/rust-lang/crates.io-index)",
  "rust-media 0.1.0",
  "sdl2 0.24.0 (git+https://github.com/AngryLawyer/rust-sdl2?rev=62e08b3d4d0a043215165231cd093964260c4510)",
 ]
@@ -80,6 +82,11 @@ source = "git+https://github.com/pcwalton/libvpx?branch=servo#3492c9d01dad901e6b
 name = "libwebm-sys"
 version = "0.1.0"
 source = "git+https://github.com/pcwalton/libwebm?branch=servo#a730c14fab6f39784bdacf25afdfa6e99cbbce9b"
+
+[[package]]
+name = "log"
+version = "0.3.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
 name = "mp4v2-sys"
@@ -187,6 +194,7 @@ dependencies = [
  "core-foundation 0.2.2 (git+https://github.com/servo/rust-core-foundation)",
  "giflib-sys 0.1.0 (git+https://github.com/pcwalton/giflib)",
  "lewton 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "libc 0.2.16 (registry+https://github.com/rust-lang/crates.io-index)",
  "libvpx-sys 0.1.0 (git+https://github.com/pcwalton/libvpx?branch=servo)",
  "libwebm-sys 0.1.0 (git+https://github.com/pcwalton/libwebm?branch=servo)",
  "mp4v2-sys 0.1.0 (git+https://github.com/pcwalton/mp4v2?branch=servo)",
@@ -263,6 +271,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 "checksum libc 0.2.16 (registry+https://github.com/rust-lang/crates.io-index)" = "408014cace30ee0f767b1c4517980646a573ec61a57957aeeabcac8ac0a02e8d"
 "checksum libvpx-sys 0.1.0 (git+https://github.com/pcwalton/libvpx?branch=servo)" = "<none>"
 "checksum libwebm-sys 0.1.0 (git+https://github.com/pcwalton/libwebm?branch=servo)" = "<none>"
+"checksum log 0.3.6 (registry+https://github.com/rust-lang/crates.io-index)" = "ab83497bf8bf4ed2a74259c1c802351fcd67a65baa86394b6ba73c36f4838054"
 "checksum mp4v2-sys 0.1.0 (git+https://github.com/pcwalton/mp4v2?branch=servo)" = "<none>"
 "checksum num 0.1.36 (registry+https://github.com/rust-lang/crates.io-index)" = "bde7c03b09e7c6a301ee81f6ddf66d7a28ec305699e3d3b056d2fc56470e3120"
 "checksum num-bigint 0.1.35 (registry+https://github.com/rust-lang/crates.io-index)" = "88b14378471f7c2adc5262f05b4701ef53e8da376453a8d8fee48e51db745e49"

@@ -7,8 +7,6 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#![feature(libc, rustc_private)]
-
 extern crate libc;
 extern crate rust_media as media;
 extern crate sdl2;

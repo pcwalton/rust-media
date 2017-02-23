@@ -9,6 +9,11 @@ authors = ["The Servo Project Developers"]
 name = "example"
 path = "example.rs"
 
+[dependencies]
+
+log = "0.3"
+libc = "0.2"
+
 [dependencies.rust-media]
 
 path = ".."
