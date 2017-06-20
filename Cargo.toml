@@ -33,9 +33,9 @@ branch = "servo"
 
 [dependencies.lewton]
 
-version = "0.4"
+version = "^0.6.2"
 default-features = false
-features = ["ieee754"]
+features = ["nightly"]
 
 [dependencies.giflib-sys]
 
@@ -55,7 +55,7 @@ libc = "0.2"
 [dev-dependencies]
 hound = "2.0"
 lewton = {version = "*", features = ["ogg"]}
-ogg = "0.4"
+ogg = "0.5"
 
 [build-dependencies]
 # Needed for mkvparse.hpp.
