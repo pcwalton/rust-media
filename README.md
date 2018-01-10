@@ -54,3 +54,7 @@ Other design goals include:
 * Play a YouTube video:
 
         $ youtube-dl https://www.youtube.com/watch?v=dQw4w9WgXcQ --exec "target/release/example {} video/mp4"
+
+# License
+
+Licensed under the same terms as Rust itself.
